@@ -61,8 +61,6 @@ class InceptionScore(Metric):
         data_type = self._dtype if hasattr(self, "_dtype") else mindspore.float32
         self.inception = FeatureExtractorInceptionV3(
             name="inecption-v3-compat",
-            feature_extractor_weights_path=
-            "D:\\__AREA_WORKING__\\codes\\playground\\playground\\weights-inception-2015-12-05.ckpt",
             request_feature=str(feature),
             custom_dtype=data_type
         )

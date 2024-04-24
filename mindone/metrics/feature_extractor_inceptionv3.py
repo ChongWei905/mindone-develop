@@ -1,3 +1,6 @@
+import sys
+from contextlib import redirect_stdout
+
 from typing import Tuple, Union
 
 import mindspore
@@ -5,10 +8,10 @@ import mindspore.nn as nn
 import mindspore.ops as ops
 import mindspore.common.initializer as init
 from mindspore import Tensor
+from .utils.download_weights import load_state_dict_from_url
 
 URL_INCEPTION_V3_WEIGHTS = "file:///D:/__AREA_WORKING__/weights-inception-2015-12-05.ckpt"
 
-# todo: upload inceptionv3 weights online and implement URL
 class BasicConv2d(nn.Cell):
     """A block for conv bn and relu"""
 
@@ -255,12 +258,12 @@ class FeatureExtractorInceptionV3(nn.Cell):
 
         # todo: finish this missed part
         if feature_extractor_weights_path is None:
-            param_dict = mindspore.load_checkpoint_from_url(feature_extractor_weights_path)
-            raise ValueError("feature extractor weights cannot be None")
+            with redirect_stdout(sys.stderr):
+                param_dict = load_state_dict_from_url(URL_INCEPTION_V3_WEIGHTS)
         else:
             param_dict = mindspore.load_checkpoint(feature_extractor_weights_path)
-            mindspore.load_param_into_net(self, param_dict)
 
+        mindspore.load_param_into_net(self, param_dict)
         for p in self.get_parameters():
             p.requires_grad = False
 

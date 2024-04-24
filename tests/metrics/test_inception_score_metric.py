@@ -8,7 +8,7 @@ EXPECTED_SCORE = 1.0538204
 EXPECTED_SCORE_STD = 0.00949103
 ACCEPTED_ERROR = 0.001
 
-def inception_score_metric():
+def test_inception_score_metric():
     imgs = mindspore.Tensor(
         np.loadtxt('D:\\__AREA_WORKING__\\codes\\playground\\playground\\tensor.txt')
     )
@@ -24,4 +24,4 @@ def inception_score_metric():
     assert std_error < ACCEPTED_ERROR
 
 if __name__ == "__main__":
-    inception_score_metric()
+    test_inception_score_metric()

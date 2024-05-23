@@ -1,6 +1,7 @@
 import math
 import numbers
 from typing import Optional, Tuple, Type, Union
+from functools import partial
 
 import mindspore as ms
 from mindspore import Parameter, Tensor, nn, ops
@@ -430,9 +431,21 @@ class DiTBlock(nn.Cell):
 
     def __init__(self, hidden_size, num_heads, mlp_ratio=4.0, **block_kwargs):
         super().__init__()
-        self.norm1 = LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
+        self.norm1 = partial(
+            ops.layer_norm,
+            normalized_shape=hidden_size,
+            weight=ops.ones(hidden_size, ms.float32),
+            bias=ops.zeros(hidden_size),
+            eps=1e-6
+        )
         self.attn = SelfAttention(hidden_size, num_heads=num_heads, qkv_bias=True, **block_kwargs)
-        self.norm2 = LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
+        self.norm2 = partial(
+            ops.layer_norm,
+            normalized_shape=hidden_size,
+            weight=ops.ones(hidden_size, ms.float32),
+            bias=ops.zeros(hidden_size),
+            eps=1e-6
+        )
         mlp_hidden_dim = int(hidden_size * mlp_ratio)
         approx_gelu = lambda: GELU(approximate="tanh")
         self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=approx_gelu, drop=0)
@@ -452,7 +465,13 @@ class FinalLayer(nn.Cell):
 
     def __init__(self, hidden_size, patch_size, out_channels):
         super().__init__()
-        self.norm_final = LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
+        self.norm_final = partial(
+            ops.layer_norm,
+            normalized_shape=hidden_size,
+            weight=ops.ones(hidden_size, ms.float32),
+            bias=ops.zeros(hidden_size),
+            eps=1e-6
+        )
         self.linear = nn.Dense(hidden_size, patch_size * patch_size * out_channels, has_bias=True)
         self.adaLN_modulation = nn.SequentialCell(nn.SiLU(), nn.Dense(hidden_size, 2 * hidden_size, has_bias=True))
 

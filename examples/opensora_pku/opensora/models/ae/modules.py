@@ -155,6 +155,7 @@ class ResnetBlock3D(nn.Cell):
                 self.conv_shortcut = CausalConv3d(in_channels, out_channels, 3, padding=1)
             else:
                 self.nin_shortcut = CausalConv3d(in_channels, out_channels, 1, padding=0)
+        self.print = ops.Print()
 
     def cal_batch(self, x):
         h = x
@@ -174,6 +175,7 @@ class ResnetBlock3D(nn.Cell):
 
     def construct(self, x):
         if self.micro_batch_size is None:
+            self.print(x.dtype)
             return self.cal_batch(x)
         else:
             y = []

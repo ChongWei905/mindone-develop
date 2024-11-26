@@ -75,6 +75,7 @@ def test_named_modules(
     ms_outputs = ms_model(*ms_inputs_args, **ms_inputs_kwargs)
 
     diffs = compute_diffs(pt_outputs, ms_outputs)
+    print("AAAAAAAAAAAAA", pt_outputs, ms_outputs)
 
     THRESHOLD = THRESHOLD_FP32 if dtype == "fp32" else THRESHOLD_FP16
     assert (

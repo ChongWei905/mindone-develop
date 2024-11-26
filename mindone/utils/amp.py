@@ -1,5 +1,5 @@
 import mindspore as ms
-from mindspore import nn, mint
+from mindspore import mint, nn
 from mindspore.train.amp import AMP_BLACK_LIST, AMP_WHITE_LIST, _auto_black_list
 
 try:

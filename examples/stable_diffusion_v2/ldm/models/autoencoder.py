@@ -16,7 +16,7 @@ from ldm.modules.diffusionmodules.model import Decoder, Encoder
 
 import mindspore as ms
 import mindspore.nn as nn
-from mindspore import ops, mint
+from mindspore import mint, ops
 
 
 class AutoencoderKL(nn.Cell):
@@ -38,12 +38,8 @@ class AutoencoderKL(nn.Cell):
         self.encoder = Encoder(dtype=self.dtype, upcast_sigmoid=upcast_sigmoid, **ddconfig)
         self.decoder = Decoder(dtype=self.dtype, upcast_sigmoid=upcast_sigmoid, **ddconfig)
         assert ddconfig["double_z"]
-        self.quant_conv = mint.nn.Conv2d(
-            2 * ddconfig["z_channels"], 2 * embed_dim, 1,  bias=True
-        ).to_float(self.dtype)
-        self.post_quant_conv = mint.nn.Conv2d(
-            embed_dim, ddconfig["z_channels"], 1, bias=True
-        ).to_float(self.dtype)
+        self.quant_conv = mint.nn.Conv2d(2 * ddconfig["z_channels"], 2 * embed_dim, 1, bias=True).to_float(self.dtype)
+        self.post_quant_conv = mint.nn.Conv2d(embed_dim, ddconfig["z_channels"], 1, bias=True).to_float(self.dtype)
         self.embed_dim = embed_dim
         if colorize_nlabels is not None:
             assert type(colorize_nlabels) == int

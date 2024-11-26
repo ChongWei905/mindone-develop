@@ -1,5 +1,5 @@
 import mindspore as ms
-from mindspore import Parameter, Tensor, nn, ops, mint
+from mindspore import Parameter, Tensor, mint, nn, ops
 from mindspore.ops import composite as C
 from mindspore.ops import functional as F
 

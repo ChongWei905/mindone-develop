@@ -4,7 +4,7 @@ from packaging import version
 
 import mindspore as ms
 import mindspore.context as context
-from mindspore import Tensor, nn, ops, mint
+from mindspore import Tensor, mint, nn, ops
 from mindspore.boost.grad_accumulation import gradient_accumulation_op as _grad_accum_op
 from mindspore.boost.grad_accumulation import gradient_clear_op as _grad_clear_op
 from mindspore.common import RowTensor

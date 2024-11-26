@@ -20,7 +20,7 @@ from ldm.util import is_old_ms_version
 
 import mindspore as ms
 import mindspore.numpy as msnp
-from mindspore import nn, ops, mint
+from mindspore import mint, nn, ops
 from mindspore.common.initializer import initializer
 
 from mindone.models.modules.flash_attention import FLASH_IS_AVAILABLE, MSFlashAttention

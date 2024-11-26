@@ -3,7 +3,7 @@ import logging
 from typing import List, Optional
 
 import mindspore as ms
-from mindspore import nn, mint
+from mindspore import mint, nn
 
 from mindone.utils.version_control import check_valid_flash_attention, choose_flash_attention_dtype
 

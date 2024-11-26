@@ -16,7 +16,7 @@
 from typing import Dict, Optional, Tuple, Union
 
 import mindspore as ms
-from mindspore import nn, ops
+from mindspore import mint, nn
 
 from ...configuration_utils import ConfigMixin, register_to_config
 from ...utils import logging
@@ -140,7 +140,7 @@ class CogVideoXBlock(nn.Cell):
         )
 
         # feed-forward
-        norm_hidden_states = ops.cat([norm_encoder_hidden_states, norm_hidden_states], axis=1)
+        norm_hidden_states = mint.cat([norm_encoder_hidden_states, norm_hidden_states], dim=1)
         ff_output = self.ff(norm_hidden_states)
 
         hidden_states = hidden_states + gate_ff * ff_output[:, text_seq_length:]
@@ -261,7 +261,7 @@ class CogVideoXTransformer3DModel(ModelMixin, ConfigMixin):
             use_positional_embeddings=not use_rotary_positional_embeddings,
             use_learned_positional_embeddings=use_learned_positional_embeddings,
         )
-        self.embedding_dropout = nn.Dropout(p=dropout)
+        self.embedding_dropout = mint.nn.Dropout(p=dropout)
 
         # 2. Time embeddings
         self.time_proj = Timesteps(inner_dim, flip_sin_to_cos, freq_shift)
@@ -294,7 +294,7 @@ class CogVideoXTransformer3DModel(ModelMixin, ConfigMixin):
             norm_eps=norm_eps,
             chunk_dim=1,
         )
-        self.proj_out = nn.Dense(inner_dim, patch_size * patch_size * out_channels)
+        self.proj_out = mint.nn.Linear(inner_dim, patch_size * patch_size * out_channels)
 
         self._gradient_checkpointing = False
 
@@ -454,7 +454,7 @@ class CogVideoXTransformer3DModel(ModelMixin, ConfigMixin):
             hidden_states = self.norm_final(hidden_states)
         else:
             # CogVideoX-5B
-            hidden_states = ops.cat([encoder_hidden_states, hidden_states], axis=1)
+            hidden_states = mint.cat([encoder_hidden_states, hidden_states], dim=1)
             hidden_states = self.norm_final(hidden_states)
             hidden_states = hidden_states[:, text_seq_length:]
 

@@ -7,9 +7,9 @@ from ldm.modules.diffusionmodules.openaimodel import Timestep
 from ldm.modules.diffusionmodules.upscaling import ImageConcatWithNoiseAugmentation
 
 import mindspore as ms
+import mindspore.mint as mint
 import mindspore.nn as nn
 import mindspore.ops as ops
-import mindspore.mint as mint
 from mindspore import Tensor
 from mindspore.common.initializer import TruncatedNormal, initializer
 

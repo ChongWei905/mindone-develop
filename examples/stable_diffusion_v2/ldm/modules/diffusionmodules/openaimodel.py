@@ -27,9 +27,9 @@ from ldm.modules.diffusionmodules.util import (
 from ldm.util import is_old_ms_version
 
 import mindspore as ms
+import mindspore.mint as mint
 import mindspore.nn as nn
 import mindspore.ops as ops
-import mindspore.mint as mint
 
 _logger = logging.getLogger(__name__)
 
@@ -57,9 +57,9 @@ class Upsample(nn.Cell):
 
     def construct(self, x, emb=None, context=None):
         if self.dims == 3:
-            x = mint.nn.functional.interpolate(x, size=(x.shape[2] * 2, x.shape[3] * 2, x.shape[4] * 2), mode='nearest')
+            x = mint.nn.functional.interpolate(x, size=(x.shape[2] * 2, x.shape[3] * 2, x.shape[4] * 2), mode="nearest")
         else:
-            x = mint.nn.functional.interpolate(x, size=(x.shape[2] * 2, x.shape[3] * 2), mode='nearest')
+            x = mint.nn.functional.interpolate(x, size=(x.shape[2] * 2, x.shape[3] * 2), mode="nearest")
         if self.use_conv:
             x = self.conv(x)
         return x

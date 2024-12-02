@@ -11,11 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import math
 from typing import Callable, List, Optional, Union
 
 import mindspore as ms
-from mindspore import nn, ops
+from mindspore import mint, nn, numpy, ops
 
 from ..image_processor import IPAdapterMaskProcessor
 from ..utils import is_mindspore_version, logging
@@ -136,8 +135,6 @@ class Attention(nn.Cell):
 
         self.scale_qk = scale_qk
         self.scale = dim_head**-0.5 if self.scale_qk else 1.0
-        # use `scale_sqrt` for ops.baddbmm to get same outputs with torch.baddbmm in fp16
-        self.scale_sqrt = float(math.sqrt(self.scale))
 
         self.heads = out_dim // dim_head if out_dim is not None else heads
         # for slice_size > 0 the attention score computation
@@ -206,30 +203,30 @@ class Attention(nn.Cell):
                 f"unknown cross_attention_norm: {cross_attention_norm}. Should be None, 'layer_norm' or 'group_norm'"
             )
 
-        self.to_q = nn.Dense(query_dim, self.inner_dim, has_bias=bias)
+        self.to_q = mint.nn.Linear(query_dim, self.inner_dim, bias=bias)
 
         if not self.only_cross_attention:
             # only relevant for the `AddedKVProcessor` classes
-            self.to_k = nn.Dense(self.cross_attention_dim, self.inner_kv_dim, has_bias=bias)
-            self.to_v = nn.Dense(self.cross_attention_dim, self.inner_kv_dim, has_bias=bias)
+            self.to_k = mint.nn.Linear(self.cross_attention_dim, self.inner_kv_dim, bias=bias)
+            self.to_v = mint.nn.Linear(self.cross_attention_dim, self.inner_kv_dim, bias=bias)
         else:
             self.to_k = None
             self.to_v = None
 
         self.added_proj_bias = added_proj_bias
         if self.added_kv_proj_dim is not None:
-            self.add_k_proj = nn.Dense(added_kv_proj_dim, self.inner_kv_dim, has_bias=added_proj_bias)
-            self.add_v_proj = nn.Dense(added_kv_proj_dim, self.inner_kv_dim, has_bias=added_proj_bias)
+            self.add_k_proj = mint.nn.Linear(added_kv_proj_dim, self.inner_kv_dim, bias=added_proj_bias)
+            self.add_v_proj = mint.nn.Linear(added_kv_proj_dim, self.inner_kv_dim, bias=added_proj_bias)
             if self.context_pre_only is not None:
-                self.add_q_proj = nn.Dense(added_kv_proj_dim, self.inner_dim, has_bias=added_proj_bias)
+                self.add_q_proj = mint.nn.Linear(added_kv_proj_dim, self.inner_dim, bias=added_proj_bias)
 
         if not self.pre_only:
             self.to_out = nn.CellList(
-                [nn.Dense(self.inner_dim, self.out_dim, has_bias=out_bias), nn.Dropout(p=dropout)]
+                [mint.nn.Linear(self.inner_dim, self.out_dim, bias=out_bias), mint.nn.Dropout(p=dropout)]
             )
 
         if self.context_pre_only is not None and not self.context_pre_only:
-            self.to_add_out = nn.Dense(self.inner_dim, self.out_dim, has_bias=out_bias)
+            self.to_add_out = mint.nn.Linear(self.inner_dim, self.out_dim, bias=out_bias)
 
         if qk_norm is not None and added_kv_proj_dim is not None:
             if qk_norm == "fp32_layer_norm":
@@ -288,6 +285,7 @@ class Attention(nn.Cell):
                     # Make sure we can run the memory efficient attention
                     flash_attn = ops.operations.nn_ops.FlashAttentionScore(1, input_layout="BSH")
                     _ = flash_attn(
+                        # todo: currently bug interface
                         ops.randn(1, 16, 64, dtype=ms.float16),
                         ops.randn(1, 16, 64, dtype=ms.float16),
                         ops.randn(1, 16, 64, dtype=ms.float16),
@@ -481,23 +479,24 @@ class Attention(nn.Cell):
             key = key.float()
 
         if attention_mask is None:
-            attention_scores = ops.bmm(
-                query * self.scale_sqrt,
-                key.swapaxes(-1, -2) * self.scale_sqrt,
-            )
+            baddbmm_input = numpy.empty((query.shape[0], query.shape[1], key.shape[1]), dtype=query.dtype)
+            beta = 0
         else:
-            attention_scores = ops.baddbmm(
-                attention_mask.to(query.dtype),
-                query * self.scale_sqrt,
-                key.swapaxes(-1, -2) * self.scale_sqrt,
-                beta=1,
-                alpha=1,
-            )
+            baddbmm_input = attention_mask
+            beta = 1
+
+        attention_scores = mint.baddbmm(
+            baddbmm_input,
+            query,
+            mint.transpose(key, -1, -2),
+            beta=beta,
+            alpha=self.scale,
+        )
 
         if self.upcast_softmax:
             attention_scores = attention_scores.float()
 
-        attention_probs = ops.softmax(attention_scores, axis=-1)
+        attention_probs = mint.nn.functional.softmax(attention_scores, dim=-1)
 
         attention_probs = attention_probs.to(dtype)
 
@@ -532,8 +531,8 @@ class Attention(nn.Cell):
             #       we want to instead pad by (0, remaining_length), where remaining_length is:
             #       remaining_length: int = target_length - current_length
             # TODO: re-enable tests/models/test_models_unet_2d_condition.py#test_model_xattn_padding
-            attention_mask = ops.Pad(paddings=((0, 0),) * (attention_mask.ndim - 1) + ((0, target_length),))(
-                attention_mask
+            attention_mask = mint.nn.functional.pad(
+                attention_mask, pad=((0, 0),) * (attention_mask.ndim - 1) + ((0, target_length),)
             )
 
         if out_dim == 3:
@@ -579,38 +578,38 @@ class Attention(nn.Cell):
 
         if not self.is_cross_attention:
             # fetch weight matrices.
-            concatenated_weights = ops.cat([self.to_q.weight, self.to_k.weight, self.to_v.weight])
+            concatenated_weights = mint.cat([self.to_q.weight, self.to_k.weight, self.to_v.weight])
             in_features = concatenated_weights.shape[1]
             out_features = concatenated_weights.shape[0]
 
             # create a new single projection layer and copy over the weights.
-            self.to_qkv = nn.Dense(in_features, out_features, has_bias=self.use_bias, dtype=dtype)
+            self.to_qkv = mint.nn.Linear(in_features, out_features, bias=self.use_bias, dtype=dtype)
             self.to_qkv.weight.set_data(concatenated_weights)
             if self.use_bias:
-                concatenated_bias = ops.cat([self.to_q.bias, self.to_k.bias, self.to_v.bias])
+                concatenated_bias = mint.cat([self.to_q.bias, self.to_k.bias, self.to_v.bias])
                 self.to_qkv.bias.set_data(concatenated_bias)
 
         else:
-            concatenated_weights = ops.cat([self.to_k.weight, self.to_v.weight])
+            concatenated_weights = mint.cat([self.to_k.weight, self.to_v.weight])
             in_features = concatenated_weights.shape[1]
             out_features = concatenated_weights.shape[0]
 
-            self.to_kv = nn.Dense(in_features, out_features, has_bias=self.use_bias, dtype=dtype)
+            self.to_kv = mint.nn.Linear(in_features, out_features, bias=self.use_bias, dtype=dtype)
             self.to_kv.weight.set_data(concatenated_weights)
             if self.use_bias:
-                concatenated_bias = ops.cat([self.to_k.bias, self.to_v.bias])
+                concatenated_bias = mint.cat([self.to_k.bias, self.to_v.bias])
                 self.to_kv.bias.set_data(concatenated_bias)
 
         # handle added projections for SD3 and others.
         if hasattr(self, "add_q_proj") and hasattr(self, "add_k_proj") and hasattr(self, "add_v_proj"):
-            concatenated_weights = ops.cat([self.add_q_proj.weight, self.add_k_proj.weight, self.add_v_proj.weight])
+            concatenated_weights = mint.cat([self.add_q_proj.weight, self.add_k_proj.weight, self.add_v_proj.weight])
             in_features = concatenated_weights.shape[1]
             out_features = concatenated_weights.shape[0]
 
-            self.to_added_qkv = nn.Dense(in_features, out_features, has_bias=self.added_proj_bias, dtype=dtype)
+            self.to_added_qkv = mint.nn.Linear(in_features, out_features, bias=self.added_proj_bias, dtype=dtype)
             self.to_added_qkv.weight.set_data(concatenated_weights)
             if self.added_proj_bias:
-                concatenated_bias = ops.cat([self.add_q_proj.bias, self.add_k_proj.bias, self.add_v_proj.bias])
+                concatenated_bias = mint.cat([self.add_q_proj.bias, self.add_k_proj.bias, self.add_v_proj.bias])
                 self.to_added_qkv.bias.set_data(concatenated_bias)
 
         self.fused_projections = fuse
@@ -701,10 +700,10 @@ class Attention(nn.Cell):
     ):
         # Adapted from mindone.diffusers.models.unets.unet_2d_condition.UNet2DConditionModel.construct
         if attn_mask is not None and attn_mask.dtype == ms.bool_:
-            attn_mask = ops.logical_not(attn_mask) * dtype_to_min(query.dtype)
+            attn_mask = mint.logical_not(attn_mask) * dtype_to_min(query.dtype)
 
         attention_probs = self.get_attention_scores(query, key, attn_mask)
-        hidden_states = ops.bmm(attention_probs, value)
+        hidden_states = mint.bmm(attention_probs, value)
 
         return hidden_states
 
@@ -729,7 +728,7 @@ class Attention(nn.Cell):
         # process `attn_mask` as logic is different between PyTorch and Mindspore
         # In MindSpore, False indicates retention and True indicates discard, in PyTorch it is the opposite
         if attn_mask is not None:
-            attn_mask = ops.logical_not(attn_mask) if attn_mask.dtype == ms.bool_ else attn_mask.bool()
+            attn_mask = mint.logical_not(attn_mask) if attn_mask.dtype == ms.bool_ else attn_mask.bool()
 
         return ops.operations.nn_ops.FlashAttentionScore(
             head_num=head_num, keep_prob=keep_prob, scale_value=scale or self.scale, input_layout=input_layout
@@ -786,7 +785,7 @@ class AttnProcessor:
         value = attn.head_to_batch_dim(value)
 
         attention_probs = attn.get_attention_scores(query, key, attention_mask)
-        hidden_states = ops.bmm(attention_probs, value)
+        hidden_states = mint.bmm(attention_probs, value)
         hidden_states = attn.batch_to_head_dim(hidden_states)
 
         # linear proj
@@ -842,13 +841,13 @@ class CustomDiffusionAttnProcessor(nn.Cell):
 
         # `_custom_diffusion` id for easy serialization and loading.
         if self.train_kv:
-            self.to_k_custom_diffusion = nn.Dense(cross_attention_dim or hidden_size, hidden_size, has_bias=False)
-            self.to_v_custom_diffusion = nn.Dense(cross_attention_dim or hidden_size, hidden_size, has_bias=False)
+            self.to_k_custom_diffusion = mint.nn.Linear(cross_attention_dim or hidden_size, hidden_size, bias=False)
+            self.to_v_custom_diffusion = mint.nn.Linear(cross_attention_dim or hidden_size, hidden_size, bias=False)
         if self.train_q_out:
-            self.to_q_custom_diffusion = nn.Dense(hidden_size, hidden_size, has_bias=False)
+            self.to_q_custom_diffusion = mint.nn.Linear(hidden_size, hidden_size, bias=False)
             self.to_out_custom_diffusion = []
-            self.to_out_custom_diffusion.append(nn.Dense(hidden_size, hidden_size, bias=out_bias))
-            self.to_out_custom_diffusion.append(nn.Dropout(p=dropout))
+            self.to_out_custom_diffusion.append(mint.nn.Linear(hidden_size, hidden_size, bias=out_bias))
+            self.to_out_custom_diffusion.append(mint.nn.Dropout(p=dropout))
             self.to_out_custom_diffusion = nn.CellList(self.to_out_custom_diffusion)
 
     def __call__(
@@ -883,7 +882,7 @@ class CustomDiffusionAttnProcessor(nn.Cell):
             value = attn.to_v(encoder_hidden_states)
 
         if crossattn:
-            detach = ops.ones_like(key)
+            detach = mint.ones_like(key)
             detach[:, :1, :] = detach[:, :1, :] * 0.0
             key = detach * key + (1 - detach) * key.detach()
             value = detach * value + (1 - detach) * value.detach()
@@ -893,7 +892,7 @@ class CustomDiffusionAttnProcessor(nn.Cell):
         value = attn.head_to_batch_dim(value)
 
         attention_probs = attn.get_attention_scores(query, key, attention_mask)
-        hidden_states = ops.bmm(attention_probs, value)
+        hidden_states = mint.bmm(attention_probs, value)
         hidden_states = attn.batch_to_head_dim(hidden_states)
 
         if self.train_q_out:
@@ -951,14 +950,14 @@ class AttnAddedKVProcessor:
             value = attn.to_v(hidden_states)
             key = attn.head_to_batch_dim(key)
             value = attn.head_to_batch_dim(value)
-            key = ops.cat([encoder_hidden_states_key_proj, key], axis=1)
-            value = ops.cat([encoder_hidden_states_value_proj, value], axis=1)
+            key = mint.cat([encoder_hidden_states_key_proj, key], dim=1)
+            value = mint.cat([encoder_hidden_states_value_proj, value], dim=1)
         else:
             key = encoder_hidden_states_key_proj
             value = encoder_hidden_states_value_proj
 
         attention_probs = attn.get_attention_scores(query, key, attention_mask)
-        hidden_states = ops.bmm(attention_probs, value)
+        hidden_states = mint.bmm(attention_probs, value)
         hidden_states = attn.batch_to_head_dim(hidden_states)
 
         # linear proj
@@ -1008,9 +1007,9 @@ class JointAttnProcessor2_0:
         encoder_hidden_states_value_proj = attn.add_v_proj(encoder_hidden_states)
 
         # attention
-        query = ops.cat([query, encoder_hidden_states_query_proj], axis=1)
-        key = ops.cat([key, encoder_hidden_states_key_proj], axis=1)
-        value = ops.cat([value, encoder_hidden_states_value_proj], axis=1)
+        query = mint.cat([query, encoder_hidden_states_query_proj], dim=1)
+        key = mint.cat([key, encoder_hidden_states_key_proj], dim=1)
+        value = mint.cat([value, encoder_hidden_states_value_proj], dim=1)
 
         inner_dim = key.shape[-1]
         head_dim = inner_dim // attn.heads
@@ -1083,9 +1082,9 @@ class FusedJointAttnProcessor2_0:
         ) = ms.mint.split(encoder_qkv, split_size, dim=-1)
 
         # attention
-        query = ops.cat([query, encoder_hidden_states_query_proj], axis=1)
-        key = ops.cat([key, encoder_hidden_states_key_proj], axis=1)
-        value = ops.cat([value, encoder_hidden_states_value_proj], axis=1)
+        query = mint.cat([query, encoder_hidden_states_query_proj], dim=1)
+        key = mint.cat([key, encoder_hidden_states_key_proj], dim=1)
+        value = mint.cat([value, encoder_hidden_states_value_proj], dim=1)
 
         inner_dim = key.shape[-1]
         head_dim = inner_dim // attn.heads
@@ -1252,9 +1251,9 @@ class FluxAttnProcessor2_0:
             encoder_hidden_states_key_proj = attn.norm_added_k(encoder_hidden_states_key_proj)
 
         # attention
-        query = ops.cat([encoder_hidden_states_query_proj, query], axis=2)
-        key = ops.cat([encoder_hidden_states_key_proj, key], axis=2)
-        value = ops.cat([encoder_hidden_states_value_proj, value], axis=2)
+        query = mint.cat([encoder_hidden_states_query_proj, query], dim=2)
+        key = mint.cat([encoder_hidden_states_key_proj, key], dim=2)
+        value = mint.cat([encoder_hidden_states_value_proj, value], dim=2)
 
         if image_rotary_emb is not None:
             # YiYi to-do: update uising apply_rotary_emb
@@ -1309,7 +1308,7 @@ class CogVideoXAttnProcessor2_0:
     ) -> ms.Tensor:
         text_seq_length = encoder_hidden_states.shape[1]
 
-        hidden_states = ops.cat([encoder_hidden_states, hidden_states], axis=1)
+        hidden_states = mint.cat([encoder_hidden_states, hidden_states], dim=1)
 
         batch_size, sequence_length, _ = (
             hidden_states.shape if encoder_hidden_states is None else encoder_hidden_states.shape
@@ -1381,7 +1380,7 @@ class FusedCogVideoXAttnProcessor2_0:
     ) -> ms.Tensor:
         text_seq_length = encoder_hidden_states.shape[1]
 
-        hidden_states = ops.cat([encoder_hidden_states, hidden_states], axis=1)
+        hidden_states = mint.cat([encoder_hidden_states, hidden_states], dim=1)
 
         batch_size, sequence_length, _ = (
             hidden_states.shape if encoder_hidden_states is None else encoder_hidden_states.shape
@@ -1393,7 +1392,7 @@ class FusedCogVideoXAttnProcessor2_0:
 
         qkv = attn.to_qkv(hidden_states)
         split_size = qkv.shape[-1] // 3
-        query, key, value = ops.split(qkv, split_size, axis=-1)
+        query, key, value = mint.split(qkv, split_size, dim=-1)
 
         inner_dim = key.shape[-1]
         head_dim = inner_dim // attn.heads
@@ -1514,9 +1513,9 @@ class XFormersAttnProcessor:
         assert query_tokens % 16 == 0, f"Sequence length of query must be divisible by 16, but got {query_tokens=}."
         # Head dimension is checked in Attention.set_use_memory_efficient_attention_xformers. We maybe pad on head_dim.
         if attn.head_dim_padding > 0:
-            query_padded = ops.pad(query, (0, attn.head_dim_padding), mode="constant", value=0.0)
-            key_padded = ops.pad(key, (0, attn.head_dim_padding), mode="constant", value=0.0)
-            value_padded = ops.pad(value, (0, attn.head_dim_padding), mode="constant", value=0.0)
+            query_padded = mint.nn.functional.pad(query, (0, attn.head_dim_padding), mode="constant", value=0.0)
+            key_padded = mint.nn.functional.pad(key, (0, attn.head_dim_padding), mode="constant", value=0.0)
+            value_padded = mint.nn.functional.pad(value, (0, attn.head_dim_padding), mode="constant", value=0.0)
         else:
             query_padded, key_padded, value_padded = query, key, value
         flash_attn = ops.operations.nn_ops.FlashAttentionScore(1, scale_value=attn.scale)
@@ -1753,12 +1752,12 @@ class SpatialNorm(nn.Cell):
         from .normalization import GroupNorm
 
         self.norm_layer = GroupNorm(num_channels=f_channels, num_groups=32, eps=1e-6, affine=True)
-        self.conv_y = nn.Conv2d(zq_channels, f_channels, kernel_size=1, stride=1, padding=0, has_bias=True)
-        self.conv_b = nn.Conv2d(zq_channels, f_channels, kernel_size=1, stride=1, padding=0, has_bias=True)
+        self.conv_y = mint.nn.Conv2d(zq_channels, f_channels, kernel_size=1, stride=1, padding=0, bias=True)
+        self.conv_b = mint.nn.Conv2d(zq_channels, f_channels, kernel_size=1, stride=1, padding=0, bias=True)
 
     def construct(self, f: ms.Tensor, zq: ms.Tensor) -> ms.Tensor:
         f_size = f.shape[-2:]
-        zq = ops.interpolate(zq, size=f_size, mode="nearest")
+        zq = mint.nn.functional.interpolate(zq, size=f_size, mode="nearest")
         norm_f = self.norm_layer(f)
         new_f = norm_f * self.conv_y(zq) + self.conv_b(zq)
         return new_f
@@ -1796,10 +1795,10 @@ class IPAdapterAttnProcessor(nn.Cell):
         self.scale = scale
 
         self.to_k_ip = nn.CellList(
-            [nn.Dense(cross_attention_dim, hidden_size, has_bias=False) for _ in range(len(num_tokens))]
+            [mint.nn.Linear(cross_attention_dim, hidden_size, bias=False) for _ in range(len(num_tokens))]
         )
         self.to_v_ip = nn.CellList(
-            [nn.Dense(cross_attention_dim, hidden_size, has_bias=False) for _ in range(len(num_tokens))]
+            [mint.nn.Linear(cross_attention_dim, hidden_size, bias=False) for _ in range(len(num_tokens))]
         )
 
     def __call__(
@@ -1857,7 +1856,7 @@ class IPAdapterAttnProcessor(nn.Cell):
         value = attn.head_to_batch_dim(value)
 
         attention_probs = attn.get_attention_scores(query, key, attention_mask)
-        hidden_states = ops.bmm(attention_probs, value)
+        hidden_states = mint.bmm(attention_probs, value)
         hidden_states = attn.batch_to_head_dim(hidden_states)
 
         if ip_adapter_masks is not None:
@@ -1915,7 +1914,7 @@ class IPAdapterAttnProcessor(nn.Cell):
                         ip_value = attn.head_to_batch_dim(ip_value)
 
                         ip_attention_probs = attn.get_attention_scores(query, ip_key, None)
-                        _current_ip_hidden_states = ops.bmm(ip_attention_probs, ip_value)
+                        _current_ip_hidden_states = mint.bmm(ip_attention_probs, ip_value)
                         _current_ip_hidden_states = attn.batch_to_head_dim(_current_ip_hidden_states)
 
                         mask_downsample = IPAdapterMaskProcessor.downsample(
@@ -1936,7 +1935,7 @@ class IPAdapterAttnProcessor(nn.Cell):
                     ip_value = attn.head_to_batch_dim(ip_value)
 
                     ip_attention_probs = attn.get_attention_scores(query, ip_key, None)
-                    current_ip_hidden_states = ops.bmm(ip_attention_probs, ip_value)
+                    current_ip_hidden_states = mint.bmm(ip_attention_probs, ip_value)
                     current_ip_hidden_states = attn.batch_to_head_dim(current_ip_hidden_states)
 
                     hidden_states = hidden_states + scale * current_ip_hidden_states

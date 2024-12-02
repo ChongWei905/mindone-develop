@@ -37,7 +37,7 @@ Todo:
 from packaging.version import parse
 
 import mindspore as ms
-from mindspore import ops
+from mindspore import mint, ops
 from mindspore.common.api import _function_forbid_reuse
 
 __all__ = [
@@ -87,6 +87,7 @@ def _conv_transpose1d(input, weight, bias=None, stride=1, padding=0, output_padd
     outH = (iH - 1) * stride[0] - (padding[0] + padding[1]) + dilation[0] * (kH - 1) + 1
     outW = (iW - 1) * stride[1] - (padding[2] + padding[3]) + dilation[1] * (kW - 1) + 1
 
+    # todo: unavailable mint interface
     op_conv_transpose2d = ops.Conv2DTranspose(
         out_channel=out_channels,
         kernel_size=(kH, kW),
@@ -139,6 +140,7 @@ def _conv_transpose2d(input, weight, bias=None, stride=1, padding=0, output_padd
     outH = (iH - 1) * stride[0] - (padding[0] + padding[1]) + dilation[0] * (kH - 1) + 1
     outW = (iW - 1) * stride[1] - (padding[2] + padding[3]) + dilation[1] * (kW - 1) + 1
 
+    # todo: unavailable mint interface
     op_conv_transpose2d = ops.Conv2DTranspose(
         out_channel=out_channels,
         kernel_size=(kH, kW),
@@ -173,9 +175,9 @@ def _group_norm(x, num_groups, weight, bias, eps):
 
     # Calculate var&mean in float32 to avoid overflow
     x = x.reshape(x_shape[0], num_groups, -1).float()
-    mean = ops.mean(x, axis=-1, keep_dims=True)
-    var = ops.mean(ops.square(x - mean), axis=-1, keep_dims=True)
-    x = (x - mean) / ops.sqrt(var + eps)
+    mean = mint.mean(x, dim=-1, keepdim=True)
+    var = mint.mean(mint.square(x - mean), dim=-1, keepdim=True)
+    x = (x - mean) / mint.sqrt(var + eps)
     x = x.reshape(x_shape).to(x_dtype)
 
     if weight is not None and bias is not None:
@@ -195,7 +197,7 @@ else:
 # interpolate
 # ================================================================================
 if MINDSPORE_VERSION >= parse("2.3.0"):
-    interpolate = ms.mint.nn.functional.interpolate
+    interpolate = mint.nn.functional.interpolate
 else:
     interpolate = ops.interpolate
 
@@ -327,24 +329,24 @@ def _multinomial(input, num_samples, replacement=True, **kwargs):
         # s = argmax( p / q ) where q ~ Exp(1)
         # No proper Exp generator op in MindSpore,
         # so we still generate it by -log(eps)
-        q = -ops.log(ops.rand_like(input))
+        q = -mint.log(mint.rand_like(input))
         if num_samples == 1:
             result = (input / q).argmax(-1, keepdim=True)
         else:
-            _, result = ops.topk(input / q, k=num_samples, dim=-1)
+            _, result = mint.topk(input / q, k=num_samples, dim=-1)
     else:
         # To generate scalar random variable X with cumulative distribution ms.mint.nn.functional(x)
         # just let X = ms.mint.nn.functional^(-1)(U) where U ~ U(0, 1)
         input = input.cumsum(-1).expand_dims(-1)
         rshape = (1, num_samples) if input.ndim == 2 else (input.shape[0], 1, num_samples)
-        rand = ops.rand(*rshape, dtype=input.dtype)
-        result = ops.ge(rand, input).long().sum(-2)
+        rand = mint.rand(*rshape, dtype=input.dtype)
+        result = mint.ge(rand, input).long().sum(-2)
 
     return result.long()
 
 
-if MINDSPORE_VERSION >= parse("2.3.0"):
-    multinomial = ops.multinomial
+if MINDSPORE_VERSION >= parse("2.4.1"):
+    multinomial = mint.multinomial
 else:
     multinomial = _multinomial
 
@@ -371,7 +373,7 @@ def _pad(input, pad, mode="constant", value=0):
     padded_height = height + top + bottom
     padded_width = width + left + right
 
-    output = ops.full((batch_size, padded_height, padded_width), value, dtype=input.dtype)
+    output = mint.full((batch_size, padded_height, padded_width), value, dtype=input.dtype)
     output[:, top : top + height, left : left + width] = input
 
     if mode == "replicate":
@@ -441,7 +443,7 @@ def _view_as_complex(input: ms.Tensor) -> ms.Tensor:
     Example::
 
         >>> import mindspore as ms
-        >>> x = ms.ops.randn(4, 2)
+        >>> x = ms.mint.randn(4, 2)
         >>> x
         [[ 1.6116, -0.5772]
          [-1.4606, -0.9120]
@@ -452,6 +454,7 @@ def _view_as_complex(input: ms.Tensor) -> ms.Tensor:
     """
     assert input.shape[-1] == 2, "Tensor must have a last dimension of size 2"
     real_part, imag_part = input.chunk(2, axis=-1)
+    # todo: unavailable mint interface
     output = ops.Complex()(real_part, imag_part).squeeze(axis=-1)
     return output
 

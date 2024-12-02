@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple, Union
 
 import mindspore as ms
-from mindspore import nn, ops
+from mindspore import mint, nn, ops
 
 from ...configuration_utils import ConfigMixin, FrozenDict, register_to_config
 from ...loaders import FromOriginalModelMixin, PeftAdapterMixin, UNet2DConditionLoadersMixin
@@ -103,7 +103,7 @@ class AnimateDiffTransformer3D(nn.Cell):
         self.in_channels = in_channels
 
         self.norm = GroupNorm(num_groups=norm_num_groups, num_channels=in_channels, eps=1e-6, affine=True)
-        self.proj_in = nn.Dense(in_channels, inner_dim)
+        self.proj_in = mint.nn.Linear(in_channels, inner_dim)
 
         # 3. Define transformers blocks
         self.transformer_blocks = nn.CellList(
@@ -125,7 +125,7 @@ class AnimateDiffTransformer3D(nn.Cell):
             ]
         )
 
-        self.proj_out = nn.Dense(inner_dim, in_channels)
+        self.proj_out = mint.nn.Linear(inner_dim, in_channels)
 
     def construct(
         self,
@@ -652,7 +652,7 @@ class CrossAttnUpBlockMotion(nn.Cell):
             if is_freeu_enabled:
                 raise NotImplementedError("apply_freeu is not implemented")
 
-            hidden_states = ops.cat([hidden_states, res_hidden_states], axis=1)
+            hidden_states = mint.cat([hidden_states, res_hidden_states], dim=1)
 
             hidden_states = resnet(hidden_states, temb)
             hidden_states = attn(
@@ -782,7 +782,7 @@ class UpBlockMotion(nn.Cell):
             if is_freeu_enabled:
                 raise NotImplementedError("apply_freeu is not implemented")
 
-            hidden_states = ops.cat([hidden_states, res_hidden_states], axis=1)
+            hidden_states = mint.cat([hidden_states, res_hidden_states], dim=1)
 
             hidden_states = resnet(hidden_states, temb)
             hidden_states = motion_module(hidden_states, num_frames=num_frames)
@@ -1067,9 +1067,7 @@ class MotionAdapter(ModelMixin, ConfigMixin, FromOriginalModelMixin):
 
         if conv_in_channels:
             # input
-            self.conv_in = nn.Conv2d(
-                conv_in_channels, block_out_channels[0], kernel_size=3, pad_mode="pad", padding=1, has_bias=True
-            )
+            self.conv_in = mint.nn.Conv2d(conv_in_channels, block_out_channels[0], kernel_size=3, padding=1)
         else:
             self.conv_in = None
 
@@ -1242,13 +1240,11 @@ class UNetMotionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin, Peft
         conv_in_kernel = 3
         conv_out_kernel = 3
         conv_in_padding = (conv_in_kernel - 1) // 2
-        self.conv_in = nn.Conv2d(
+        self.conv_in = mint.nn.Conv2d(
             in_channels,
             block_out_channels[0],
             kernel_size=conv_in_kernel,
-            pad_mode="pad",
             padding=conv_in_padding,
-            has_bias=True,
         )
 
         # time
@@ -1474,19 +1470,17 @@ class UNetMotionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin, Peft
         # out
         if norm_num_groups is not None:
             self.conv_norm_out = GroupNorm(num_channels=block_out_channels[0], num_groups=norm_num_groups, eps=norm_eps)
-            self.conv_act = nn.SiLU()
+            self.conv_act = mint.nn.SiLU()
         else:
             self.conv_norm_out = None
             self.conv_act = None
 
         conv_out_padding = (conv_out_kernel - 1) // 2
-        self.conv_out = nn.Conv2d(
+        self.conv_out = mint.nn.Conv2d(
             block_out_channels[0],
             out_channels,
             kernel_size=conv_out_kernel,
-            pad_mode="pad",
             padding=conv_out_padding,
-            has_bias=True,
         )
 
     @classmethod
@@ -1574,7 +1568,7 @@ class UNetMotionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin, Peft
         # while the last 5 channels must be PIA conv_in weights.
         if has_motion_adapter and motion_adapter.config["conv_in_channels"]:
             model.conv_in = motion_adapter.conv_in
-            updated_conv_in_weight = ops.cat([unet.conv_in.weight, motion_adapter.conv_in.weight[:, 4:, :, :]], axis=1)
+            updated_conv_in_weight = mint.cat([unet.conv_in.weight, motion_adapter.conv_in.weight[:, 4:, :, :]], dim=1)
             ms.load_param_into_net(model.conv_in, {"weight": updated_conv_in_weight, "bias": unet.conv_in.bias})
         else:
             ms.load_param_into_net(model.conv_in, unet.conv_in.parameters_dict())
@@ -1883,6 +1877,7 @@ class UNetMotionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin, Peft
 
         # 1. time
         timesteps = timestep
+        # todo: unavailable mint interface
         if not ops.is_tensor(timesteps):
             # TODO: this requires sync between CPU and GPU. So try to pass timesteps as tensors if you can
             if isinstance(timestep, float):
@@ -1922,7 +1917,7 @@ class UNetMotionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin, Peft
             time_embeds = self.add_time_proj(time_ids.flatten()).to(text_embeds.dtype)
             time_embeds = time_embeds.reshape((text_embeds.shape[0], -1))
 
-            add_embeds = ops.concat([text_embeds, time_embeds], axis=-1)
+            add_embeds = mint.concat([text_embeds, time_embeds], dim=-1)
             add_embeds = add_embeds.to(emb.dtype)
             aug_emb = self.add_embedding(add_embeds)
 

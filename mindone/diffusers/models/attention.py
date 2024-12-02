@@ -14,7 +14,7 @@
 from typing import Any, Dict, Optional
 
 import mindspore as ms
-from mindspore import nn, ops
+from mindspore import mint, nn
 
 from ..utils import logging
 from .activations import GEGLU, GELU, ApproximateGELU, SwiGLU
@@ -33,9 +33,9 @@ def _chunked_feed_forward(ff: nn.Cell, hidden_states: ms.Tensor, chunk_dim: int,
         )
 
     num_chunks = hidden_states.shape[chunk_dim] // chunk_size
-    ff_output = ops.cat(
-        [ff(hid_slice) for hid_slice in hidden_states.chunk(num_chunks, axis=chunk_dim)],
-        axis=chunk_dim,
+    ff_output = mint.cat(
+        [ff(hid_slice) for hid_slice in mint.chunk(hidden_states, num_chunks, dim=chunk_dim)],
+        dim=chunk_dim,
     )
     return ff_output
 
@@ -55,7 +55,7 @@ class GatedSelfAttentionDense(nn.Cell):
         super().__init__()
 
         # we need a linear projection since we need cat visual feature and obj feature
-        self.linear = nn.Dense(context_dim, query_dim)
+        self.linear = mint.nn.Linear(context_dim, query_dim)
 
         self.attn = Attention(query_dim=query_dim, heads=n_heads, dim_head=d_head)
         self.ff = FeedForward(query_dim, activation_fn="geglu")
@@ -75,8 +75,8 @@ class GatedSelfAttentionDense(nn.Cell):
         n_visual = x.shape[1]
         objs = self.linear(objs)
 
-        x = x + self.alpha_attn.tanh() * self.attn(self.norm1(ops.cat([x, objs], axis=1)))[:, :n_visual, :]
-        x = x + self.alpha_dense.tanh() * self.ff(self.norm2(x))
+        x = x + mint.tanh(self.alpha_attn) * self.attn(self.norm1(mint.cat([x, objs], dim=1)))[:, :n_visual, :]
+        x = x + mint.tanh(self.alpha_dense) * self.ff(self.norm2(x))
 
         return x
 
@@ -397,7 +397,7 @@ class BasicTransformerBlock(nn.Cell):
 
         # 5. Scale-shift for PixArt-Alpha.
         if norm_type == "ada_norm_single":
-            self.scale_shift_table = ms.Parameter(ops.randn(6, dim) / dim**0.5, name="scale_shift_table")
+            self.scale_shift_table = ms.Parameter(mint.randn(6, dim) / dim**0.5, name="scale_shift_table")
 
         # let chunk size default to None
         self._chunk_size = None
@@ -683,7 +683,7 @@ class SkipFFTransformerBlock(nn.Cell):
     ):
         super().__init__()
         if kv_input_dim != dim:
-            self.kv_mapper = nn.Dense(kv_input_dim, dim, has_bias=kv_input_dim_proj_use_bias)
+            self.kv_mapper = mint.nn.Linear(kv_input_dim, dim, bias=kv_input_dim_proj_use_bias)
         else:
             self.kv_mapper = None
 
@@ -722,7 +722,7 @@ class SkipFFTransformerBlock(nn.Cell):
             cross_attention_kwargs = {}
 
         if self.kv_mapper is not None:
-            encoder_hidden_states = self.kv_mapper(ops.silu(encoder_hidden_states))
+            encoder_hidden_states = self.kv_mapper(mint.nn.functional.silu(encoder_hidden_states))
 
         norm_hidden_states = self.norm1(hidden_states)
 
@@ -792,12 +792,12 @@ class FeedForward(nn.Cell):
         # project in
         net.append(act_fn)
         # project dropout
-        net.append(nn.Dropout(p=dropout))
+        net.append(mint.nn.Dropout(p=dropout))
         # project out
-        net.append(nn.Dense(inner_dim, dim_out, has_bias=bias))
+        net.append(mint.nn.Linear(inner_dim, dim_out, bias=bias))
         # FF as used in Vision Transformer, MLP-Mixer, etc. have a final dropout
         if final_dropout:
-            net.append(nn.Dropout(p=dropout))
+            net.append(mint.nn.Dropout(p=dropout))
         self.net = nn.CellList(net)
 
     def construct(self, hidden_states: ms.Tensor) -> ms.Tensor:

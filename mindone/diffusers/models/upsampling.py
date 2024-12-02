@@ -14,7 +14,7 @@
 from typing import Optional, Tuple
 
 import mindspore as ms
-from mindspore import nn, ops
+from mindspore import mint, nn
 
 from .layers_compat import conv_transpose2d, fp32_interpolate
 from .normalization import LayerNorm, RMSNorm
@@ -53,8 +53,10 @@ class Upsample1D(nn.Cell):
 
         self.conv = None
         if use_conv_transpose:
+            # todo: unavailable mint interface
             self.conv = nn.Conv1dTranspose(channels, self.out_channels, 4, 2, pad_mode="pad", padding=1, has_bias=True)
         elif use_conv:
+            # todo: unavailable mint interface
             self.conv = nn.Conv1d(self.channels, self.out_channels, 3, pad_mode="pad", padding=1, has_bias=True)
 
     def construct(self, inputs: ms.Tensor) -> ms.Tensor:
@@ -64,7 +66,7 @@ class Upsample1D(nn.Cell):
 
         # Only 'area' mode supports argument 'scale_factor', use 'recompute_scale_factor=True'
         # refer to: https://www.mindspore.cn/docs/zh-CN/r2.2/note/api_mapping/pytorch_diff/interpolate.html
-        outputs = ops.interpolate(inputs, scale_factor=2.0, mode="nearest", recompute_scale_factor=True)
+        outputs = mint.nn.functional.interpolate(inputs, scale_factor=2.0, mode="nearest", recompute_scale_factor=True)
 
         if self.use_conv:
             outputs = self.conv(outputs)
@@ -124,6 +126,7 @@ class Upsample2D(nn.Cell):
         if use_conv_transpose:
             if kernel_size is None:
                 kernel_size = 4
+            # todo: unavailable mint interface
             conv = nn.Conv2dTranspose(
                 channels,
                 self.out_channels,
@@ -136,13 +139,12 @@ class Upsample2D(nn.Cell):
         elif use_conv:
             if kernel_size is None:
                 kernel_size = 3
-            conv = nn.Conv2d(
+            conv = mint.nn.Conv2d(
                 self.channels,
                 self.out_channels,
                 kernel_size=kernel_size,
-                pad_mode="pad",
                 padding=padding,
-                has_bias=bias,
+                bias=bias,
             )
 
         # TODO(Suraj, Patrick) - clean up after weight dicts are correctly renamed
@@ -172,9 +174,9 @@ class Upsample2D(nn.Cell):
         if self.interpolate:
             if output_size is None:
                 _, _, h, w = hidden_states.shape
-                hidden_states = ops.interpolate(hidden_states, size=(h * 2, w * 2), mode="nearest")
+                hidden_states = mint.nn.functional.interpolate(hidden_states, size=(h * 2, w * 2), mode="nearest")
             else:
-                hidden_states = ops.interpolate(hidden_states, size=output_size, mode="nearest")
+                hidden_states = mint.nn.functional.interpolate(hidden_states, size=output_size, mode="nearest")
 
         # If the input is bfloat16, we cast back to bfloat16
         if dtype == ms.bfloat16:
@@ -214,9 +216,7 @@ class FirUpsample2D(nn.Cell):
         super().__init__()
         out_channels = out_channels if out_channels else channels
         if use_conv:
-            self.Conv2d_0 = nn.Conv2d(
-                channels, out_channels, kernel_size=3, stride=1, pad_mode="pad", padding=1, has_bias=True
-            )
+            self.Conv2d_0 = mint.nn.Conv2d(channels, out_channels, kernel_size=3, stride=1, padding=1)
         self.use_conv = use_conv
         self.fir_kernel = fir_kernel
         self.out_channels = out_channels
@@ -262,8 +262,8 @@ class FirUpsample2D(nn.Cell):
         # setup kernel
         kernel = ms.Tensor(kernel, dtype=ms.float32)
         if kernel.ndim == 1:
-            kernel = ops.outer(kernel, kernel)
-        kernel /= ops.sum(kernel)
+            kernel = mint.outer(kernel, kernel)
+        kernel /= mint.sum(kernel)
 
         kernel = kernel * (gain * (factor**2))
 
@@ -288,9 +288,9 @@ class FirUpsample2D(nn.Cell):
             num_groups = hidden_states.shape[1] // inC
 
             # Transpose weights.
-            weight = ops.reshape(weight, (num_groups, -1, inC, convH, convW))
-            weight = ops.flip(weight, dims=[3, 4]).permute(0, 2, 1, 3, 4)
-            weight = ops.reshape(weight, (num_groups * inC, -1, convH, convW))
+            weight = mint.reshape(weight, (num_groups, -1, inC, convH, convW))
+            weight = mint.flip(weight, dims=[3, 4]).permute(0, 2, 1, 3, 4)
+            weight = mint.reshape(weight, (num_groups * inC, -1, convH, convW))
 
             inverse_conv = conv_transpose2d(
                 hidden_states,
@@ -341,7 +341,7 @@ class KUpsample2D(nn.Cell):
         self.kernel = kernel_1d.T @ kernel_1d
 
     def construct(self, inputs: ms.Tensor) -> ms.Tensor:
-        inputs = ops.pad(inputs, ((self.pad + 1) // 2,) * 4, self.pad_mode)
+        inputs = mint.nn.functional.pad(inputs, ((self.pad + 1) // 2,) * 4, self.pad_mode)
         weight = inputs.new_zeros(
             [
                 inputs.shape[1],
@@ -350,7 +350,7 @@ class KUpsample2D(nn.Cell):
                 self.kernel.shape[1],
             ]
         )
-        indices = ops.arange(inputs.shape[1])
+        indices = mint.arange(inputs.shape[1])
         kernel = self.kernel.to(weight.dtype)[None, :].broadcast_to((inputs.shape[1], -1, -1))
         weight[indices, indices] = kernel
         return conv_transpose2d(inputs, weight, stride=2, padding=self.pad * 2 + 1)
@@ -386,14 +386,12 @@ class CogVideoXUpsample3D(nn.Cell):
     ) -> None:
         super().__init__()
 
-        self.conv = nn.Conv2d(
+        self.conv = mint.nn.Conv2d(
             in_channels,
             out_channels,
             kernel_size=kernel_size,
             stride=stride,
             padding=padding,
-            pad_mode="pad",
-            has_bias=True,
         )
         self.compress_time = compress_time
 
@@ -406,7 +404,7 @@ class CogVideoXUpsample3D(nn.Cell):
                 x_first = fp32_interpolate(x_first, scale_factor=2.0)
                 x_rest = fp32_interpolate(x_rest, scale_factor=2.0)
                 x_first = x_first[:, :, None, :, :]
-                inputs = ops.cat([x_first, x_rest], axis=2)
+                inputs = mint.cat([x_first, x_rest], dim=2)
             elif inputs.shape[2] > 1:
                 inputs = fp32_interpolate(inputs, scale_factor=2.0)
             else:
@@ -448,10 +446,10 @@ def upfirdn2d_native(
     kernel_h, kernel_w = kernel.shape
 
     out = tensor.view(-1, in_h, 1, in_w, 1, minor)
-    out = ops.Pad(paddings=((0, 0), (0, 0), (0, up_y - 1), (0, 0), (0, up_x - 1), (0, 0)))(out)
+    out = mint.nn.functional.pad(out, [0, 0, 0, up_x - 1, 0, 0, 0, up_y - 1])
     out = out.view(-1, in_h * up_y, in_w * up_x, minor)
 
-    out = ops.Pad(paddings=((0, 0), (max(pad_y0, 0), max(pad_y1, 0)), (max(pad_x0, 0), max(pad_x1, 0)), (0, 0)))(out)
+    out = mint.nn.functional.pad(out, [0, 0, max(pad_x0, 0), max(pad_x1, 0), max(pad_y0, 0), max(pad_y1, 0)])
     out = out[
         :,
         max(-pad_y0, 0) : out.shape[1] - max(-pad_y1, 0),
@@ -461,8 +459,8 @@ def upfirdn2d_native(
 
     out = out.permute(0, 3, 1, 2)
     out = out.reshape([-1, 1, in_h * up_y + pad_y0 + pad_y1, in_w * up_x + pad_x0 + pad_x1])
-    w = ops.flip(kernel, [0, 1]).view(1, 1, kernel_h, kernel_w)
-    out = ops.conv2d(out, w.to(out.dtype))
+    w = mint.flip(kernel, [0, 1]).view(1, 1, kernel_h, kernel_w)
+    out = mint.conv2d(out, w.to(out.dtype))
     out = out.reshape(
         -1,
         minor,
@@ -511,8 +509,8 @@ def upsample_2d(
 
     kernel = ms.Tensor(kernel, dtype=ms.float32)
     if kernel.ndim == 1:
-        kernel = ops.outer(kernel, kernel)
-    kernel /= ops.sum(kernel)
+        kernel = mint.outer(kernel, kernel)
+    kernel /= mint.sum(kernel)
 
     kernel = kernel * (gain * (factor**2))
     pad_value = kernel.shape[0] - factor

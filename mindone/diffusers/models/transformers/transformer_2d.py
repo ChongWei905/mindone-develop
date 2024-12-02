@@ -14,7 +14,7 @@
 from typing import Any, Dict, Optional
 
 import mindspore as ms
-from mindspore import nn, ops
+from mindspore import mint, nn
 
 from ...configuration_utils import LegacyConfigMixin, register_to_config
 from ...utils import deprecate, logging
@@ -176,11 +176,9 @@ class Transformer2DModel(LegacyModelMixin, LegacyConfigMixin):
             num_groups=self.config.norm_num_groups, num_channels=self.in_channels, eps=1e-6, affine=True
         )
         if self.use_linear_projection:
-            self.proj_in = nn.Dense(self.in_channels, self.inner_dim)
+            self.proj_in = mint.nn.Linear(self.in_channels, self.inner_dim)
         else:
-            self.proj_in = nn.Conv2d(
-                self.in_channels, self.inner_dim, kernel_size=1, stride=1, pad_mode="pad", padding=0, has_bias=True
-            )
+            self.proj_in = mint.nn.Conv2d(self.in_channels, self.inner_dim, kernel_size=1, stride=1, padding=0)
 
         self.transformer_blocks = nn.CellList(
             [
@@ -206,11 +204,9 @@ class Transformer2DModel(LegacyModelMixin, LegacyConfigMixin):
         )
 
         if self.use_linear_projection:
-            self.proj_out = nn.Dense(self.inner_dim, self.out_channels)
+            self.proj_out = mint.nn.Linear(self.inner_dim, self.out_channels)
         else:
-            self.proj_out = nn.Conv2d(
-                self.inner_dim, self.out_channels, kernel_size=1, stride=1, pad_mode="pad", padding=0, has_bias=True
-            )
+            self.proj_out = mint.nn.Conv2d(self.inner_dim, self.out_channels, kernel_size=1, stride=1, padding=0)
 
     def _init_vectorized_inputs(self, norm_type):
         assert self.config.sample_size is not None, "Transformer2DModel over discrete input must provide sample_size"
@@ -250,7 +246,7 @@ class Transformer2DModel(LegacyModelMixin, LegacyConfigMixin):
         )
 
         self.norm_out = LayerNorm(self.inner_dim)
-        self.out = nn.Dense(self.inner_dim, self.config.num_vector_embeds - 1)
+        self.out = mint.nn.Linear(self.inner_dim, self.config.num_vector_embeds - 1)
 
     def _init_patched_inputs(self, norm_type):
         assert self.config.sample_size is not None, "Transformer2DModel over patched input must provide sample_size"
@@ -298,16 +294,16 @@ class Transformer2DModel(LegacyModelMixin, LegacyConfigMixin):
 
         if self.config.norm_type != "ada_norm_single":
             self.norm_out = LayerNorm(self.inner_dim, elementwise_affine=False, eps=1e-6)
-            self.proj_out_1 = nn.Dense(self.inner_dim, 2 * self.inner_dim)
-            self.proj_out_2 = nn.Dense(
+            self.proj_out_1 = mint.nn.Linear(self.inner_dim, 2 * self.inner_dim)
+            self.proj_out_2 = mint.nn.Linear(
                 self.inner_dim, self.config.patch_size * self.config.patch_size * self.out_channels
             )
         elif self.config.norm_type == "ada_norm_single":
             self.norm_out = LayerNorm(self.inner_dim, elementwise_affine=False, eps=1e-6)
             self.scale_shift_table = ms.Parameter(
-                ops.randn(2, self.inner_dim) / self.inner_dim**0.5, name="scale_shift_table"
+                mint.randn(2, self.inner_dim) / self.inner_dim**0.5, name="scale_shift_table"
             )
-            self.proj_out = nn.Dense(
+            self.proj_out = mint.nn.Linear(
                 self.inner_dim, self.config.patch_size * self.config.patch_size * self.out_channels
             )
 
@@ -521,7 +517,7 @@ class Transformer2DModel(LegacyModelMixin, LegacyConfigMixin):
         # (batch, self.num_vector_embeds - 1, self.num_latent_pixels)
         logits = logits.permute(0, 2, 1)
         # log(p(x_0))
-        output = ops.log_softmax(logits.float(), axis=1).to(hidden_states.dtype)
+        output = mint.nn.functional.log_softmax(logits.float(), dim=1).to(hidden_states.dtype)
         return output
 
     def _get_output_for_patched_inputs(
@@ -531,7 +527,7 @@ class Transformer2DModel(LegacyModelMixin, LegacyConfigMixin):
             conditioning = self.transformer_blocks[0].norm1.emb(
                 timestep, class_labels, hidden_dtype=hidden_states.dtype
             )
-            shift, scale = self.proj_out_1(ops.silu(conditioning)).chunk(2, axis=1)
+            shift, scale = mint.chunk(self.proj_out_1(mint.nn.functional.silu(conditioning)), 2, dim=1)
             hidden_states = self.norm_out(hidden_states) * (1 + scale[:, None]) + shift[:, None]
             hidden_states = self.proj_out_2(hidden_states)
         elif self.config.norm_type == "ada_norm_single":

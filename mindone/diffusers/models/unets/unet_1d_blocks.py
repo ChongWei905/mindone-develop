@@ -14,7 +14,7 @@
 from typing import Optional, Tuple, Union
 
 import mindspore as ms
-from mindspore import nn, ops
+from mindspore import mint, nn, ops
 
 from ..activations import get_activation
 from ..layers_compat import conv_transpose1d, pad
@@ -130,7 +130,7 @@ class UpResnetBlock1D(nn.Cell):
     ) -> ms.Tensor:
         if res_hidden_states_tuple is not None:
             res_hidden_states = res_hidden_states_tuple[-1]
-            hidden_states = ops.cat((hidden_states, res_hidden_states), axis=1)
+            hidden_states = mint.cat((hidden_states, res_hidden_states), dim=1)
 
         hidden_states = self.resnets[0](hidden_states, temb)
         for resnet in self.resnets[1:]:
@@ -219,9 +219,11 @@ class MidResTemporalBlock1D(nn.Cell):
 class OutConv1DBlock(nn.Cell):
     def __init__(self, num_groups_out: int, out_channels: int, embed_dim: int, act_fn: str):
         super().__init__()
+        # todo: unavailable mint interface
         self.final_conv1d_1 = nn.Conv1d(embed_dim, embed_dim, 5, padding=2, has_bias=True, pad_mode="pad")
         self.final_conv1d_gn = GroupNorm(num_groups_out, embed_dim)
         self.final_conv1d_act = get_activation(act_fn)()
+        # todo: unavailable mint interface
         self.final_conv1d_2 = nn.Conv1d(embed_dim, out_channels, 1, has_bias=True, pad_mode="valid")
 
     def construct(self, hidden_states: ms.Tensor, temb: Optional[ms.Tensor] = None) -> ms.Tensor:
@@ -239,15 +241,15 @@ class OutValueFunctionBlock(nn.Cell):
         super().__init__()
         self.final_block = nn.CellList(
             [
-                nn.Dense(fc_dim + embed_dim, fc_dim // 2),
+                mint.nn.Linear(fc_dim + embed_dim, fc_dim // 2),
                 get_activation(act_fn)(),
-                nn.Dense(fc_dim // 2, 1),
+                mint.nn.Linear(fc_dim // 2, 1),
             ]
         )
 
     def construct(self, hidden_states: ms.Tensor, temb: ms.Tensor) -> ms.Tensor:
         hidden_states = hidden_states.view(hidden_states.shape[0], -1)
-        hidden_states = ops.cat((hidden_states, temb), axis=-1)
+        hidden_states = mint.cat((hidden_states, temb), dim=-1)
         for layer in self.final_block:
             hidden_states = layer(hidden_states)
 
@@ -286,9 +288,10 @@ class Downsample1d(nn.Cell):
         dtype = hidden_states.dtype
         hidden_states = pad(hidden_states, (self.pad,) * 2, self.pad_mode)
         weight = hidden_states.new_zeros([hidden_states.shape[1], hidden_states.shape[1], self.kernel.shape[0]])
-        indices = ops.arange(hidden_states.shape[1])
+        indices = mint.arange(hidden_states.shape[1])
         kernel = self.kernel.to(weight.dtype)[None, :].broadcast_to((hidden_states.shape[1], -1))
         weight[indices, indices] = kernel
+        # todo: unavailabel mint interface
         return ops.conv1d(hidden_states.float(), weight.float(), stride=2).to(dtype)
 
 
@@ -303,7 +306,7 @@ class Upsample1d(nn.Cell):
     def construct(self, hidden_states: ms.Tensor, temb: Optional[ms.Tensor] = None) -> ms.Tensor:
         hidden_states = pad(hidden_states, ((self.pad + 1) // 2,) * 2, self.pad_mode)
         weight = hidden_states.new_zeros([hidden_states.shape[1], hidden_states.shape[1], self.kernel.shape[0]])
-        indices = ops.arange(hidden_states.shape[1])
+        indices = mint.arange(hidden_states.shape[1])
         kernel = self.kernel.to(weight.dtype)[None, :].broadcast_to((hidden_states.shape[1], -1))
         weight[indices, indices] = kernel
         return conv_transpose1d(hidden_states, weight, stride=2, padding=self.pad * 2 + 1)
@@ -316,13 +319,13 @@ class SelfAttention1d(nn.Cell):
         self.group_norm = GroupNorm(1, num_channels=in_channels)
         self.num_heads = n_head
 
-        self.query = nn.Dense(self.channels, self.channels)
-        self.key = nn.Dense(self.channels, self.channels)
-        self.value = nn.Dense(self.channels, self.channels)
+        self.query = mint.nn.Linear(self.channels, self.channels)
+        self.key = mint.nn.Linear(self.channels, self.channels)
+        self.value = mint.nn.Linear(self.channels, self.channels)
 
-        self.proj_attn = nn.Dense(self.channels, self.channels, has_bias=True)
+        self.proj_attn = mint.nn.Linear(self.channels, self.channels, bias=True)
 
-        self.dropout = nn.Dropout(p=dropout_rate)
+        self.dropout = mint.nn.Dropout(p=dropout_rate)
 
     def transpose_for_scores(self, projection: ms.Tensor) -> ms.Tensor:
         new_projection_shape = projection.shape[:-1] + (self.num_heads, -1)
@@ -345,13 +348,13 @@ class SelfAttention1d(nn.Cell):
         key_states = self.transpose_for_scores(key_proj)
         value_states = self.transpose_for_scores(value_proj)
 
-        scale = float(1 / ops.sqrt(ops.sqrt(ms.tensor(key_states.shape[-1], dtype=ms.float64))))
+        scale = float(1 / mint.sqrt(mint.sqrt(ms.tensor(key_states.shape[-1], dtype=ms.float64))))
 
-        attention_scores = ops.matmul(query_states * scale, key_states.transpose(0, 1, -1, -2) * scale)
-        attention_probs = ops.softmax(attention_scores, axis=-1)
+        attention_scores = mint.matmul(query_states * scale, key_states.transpose(0, 1, -1, -2) * scale)
+        attention_probs = mint.nn.functional.softmax(attention_scores, dim=-1)
 
         # compute attention output
-        hidden_states = ops.matmul(attention_probs, value_states)
+        hidden_states = mint.matmul(attention_probs, value_states)
 
         hidden_states = hidden_states.permute(0, 2, 1, 3)
         new_hidden_states_shape = hidden_states.shape[:-2] + (self.channels,)
@@ -374,16 +377,19 @@ class ResConvBlock(nn.Cell):
         self.has_conv_skip = in_channels != out_channels
 
         if self.has_conv_skip:
+            # todo: unavailable mint interface
             self.conv_skip = nn.Conv1d(in_channels, out_channels, 1, pad_mode="valid")
 
+        # todo: unavailable mint interface
         self.conv_1 = nn.Conv1d(in_channels, mid_channels, 5, padding=2, has_bias=True, pad_mode="pad")
         self.group_norm_1 = GroupNorm(1, mid_channels)
-        self.gelu_1 = nn.GELU()
+        self.gelu_1 = mint.nn.GELU()
+        # todo: unavailable mint interface
         self.conv_2 = nn.Conv1d(mid_channels, out_channels, 5, padding=2, has_bias=True, pad_mode="pad")
 
         if not self.is_last:
             self.group_norm_2 = GroupNorm(1, out_channels)
-            self.gelu_2 = nn.GELU()
+            self.gelu_2 = mint.nn.GELU()
 
     def construct(self, hidden_states: ms.Tensor) -> ms.Tensor:
         residual = self.conv_skip(hidden_states) if self.has_conv_skip else hidden_states
@@ -508,7 +514,7 @@ class DownBlock1DNoSkip(nn.Cell):
         self.resnets = nn.CellList(resnets)
 
     def construct(self, hidden_states: ms.Tensor, temb: Optional[ms.Tensor] = None) -> ms.Tensor:
-        hidden_states = ops.cat([hidden_states, temb], axis=1)
+        hidden_states = mint.cat([hidden_states, temb], dim=1)
         for resnet in self.resnets:
             hidden_states = resnet(hidden_states)
 
@@ -542,7 +548,7 @@ class AttnUpBlock1D(nn.Cell):
         temb: Optional[ms.Tensor] = None,
     ) -> ms.Tensor:
         res_hidden_states = res_hidden_states_tuple[-1]
-        hidden_states = ops.cat([hidden_states, res_hidden_states], axis=1)
+        hidden_states = mint.cat([hidden_states, res_hidden_states], dim=1)
 
         for resnet, attn in zip(self.resnets, self.attentions):
             hidden_states = resnet(hidden_states)
@@ -574,7 +580,7 @@ class UpBlock1D(nn.Cell):
         temb: Optional[ms.Tensor] = None,
     ) -> ms.Tensor:
         res_hidden_states = res_hidden_states_tuple[-1]
-        hidden_states = ops.cat([hidden_states, res_hidden_states], axis=1)
+        hidden_states = mint.cat([hidden_states, res_hidden_states], dim=1)
 
         for resnet in self.resnets:
             hidden_states = resnet(hidden_states)
@@ -604,7 +610,7 @@ class UpBlock1DNoSkip(nn.Cell):
         temb: Optional[ms.Tensor] = None,
     ) -> ms.Tensor:
         res_hidden_states = res_hidden_states_tuple[-1]
-        hidden_states = ops.cat([hidden_states, res_hidden_states], axis=1)
+        hidden_states = mint.cat([hidden_states, res_hidden_states], dim=1)
 
         for resnet in self.resnets:
             hidden_states = resnet(hidden_states)

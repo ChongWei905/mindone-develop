@@ -20,7 +20,7 @@ from typing import List, Optional, Tuple, Union
 import numpy as np
 
 import mindspore as ms
-from mindspore import ops
+from mindspore import mint
 
 from . import logging
 
@@ -73,7 +73,7 @@ def randn_tensor(
     if isinstance(generator, list):
         shape = (1,) + shape[1:]
         latents = [randn(shape, generator=generator[i], dtype=dtype) for i in range(batch_size)]
-        latents = ops.cat(latents, axis=0)
+        latents = mint.cat(latents, dim=0)
     else:
         latents = randn(shape, generator=generator, dtype=dtype)
 

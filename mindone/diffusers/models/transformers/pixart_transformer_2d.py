@@ -14,7 +14,7 @@
 from typing import Any, Dict, Optional, Union
 
 import mindspore as ms
-from mindspore import nn, ops
+from mindspore import mint, nn
 
 from ...configuration_utils import ConfigMixin, register_to_config
 from ...utils import logging
@@ -171,9 +171,11 @@ class PixArtTransformer2DModel(ModelMixin, ConfigMixin):
         # 3. Output blocks.
         self.norm_out = LayerNorm(self.inner_dim, elementwise_affine=False, eps=1e-6)
         self.scale_shift_table = ms.Parameter(
-            ops.randn(2, self.inner_dim) / self.inner_dim**0.5, name="scale_shift_table"
+            mint.randn(2, self.inner_dim) / self.inner_dim**0.5, name="scale_shift_table"
         )
-        self.proj_out = nn.Dense(self.inner_dim, self.config.patch_size * self.config.patch_size * self.out_channels)
+        self.proj_out = mint.nn.Linear(
+            self.inner_dim, self.config.patch_size * self.config.patch_size * self.out_channels
+        )
 
         self.adaln_single = AdaLayerNormSingle(self.inner_dim, use_additional_conditions=self.use_additional_conditions)
         self.caption_projection = None

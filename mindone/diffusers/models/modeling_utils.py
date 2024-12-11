@@ -26,7 +26,7 @@ from huggingface_hub import create_repo
 from huggingface_hub.utils import validate_hf_hub_args
 
 import mindspore as ms
-from mindspore import nn, ops
+from mindspore import mint, nn, ops
 
 from mindone.safetensors.mindspore import save_file as safe_save_file
 
@@ -818,7 +818,7 @@ class ModelMixin(nn.Cell, PushToHubMixin):
             embedding_param_names = [
                 f"{name}.weight"
                 for name, module_type in self.cells_and_names()
-                if isinstance(module_type, nn.Embedding)
+                if isinstance(module_type, mint.nn.Embedding)
             ]
             non_embedding_parameters = [
                 parameter for name, parameter in self.parameters_and_names() if name not in embedding_param_names

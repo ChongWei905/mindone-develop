@@ -23,7 +23,7 @@ import requests
 import yaml
 
 import mindspore as ms
-from mindspore import Parameter, ops
+from mindspore import Parameter, mint
 
 from ..models.modeling_utils import _convert_state_dict, load_state_dict
 from ..schedulers import (
@@ -1429,7 +1429,7 @@ def create_diffusers_clip_model_from_ldm(
     model_config = cls.config_class.from_pretrained(**config, subfolder=subfolder, local_files_only=local_files_only)
     model = cls(model_config)
 
-    position_embedding_dim = model.text_model.embeddings.position_embedding.embedding_table.shape[-1]
+    position_embedding_dim = model.text_model.embeddings.position_embedding.weight.shape[-1]
 
     if is_clip_model(checkpoint):
         diffusers_format_checkpoint = convert_ldm_clip_checkpoint(checkpoint)
@@ -1446,7 +1446,7 @@ def create_diffusers_clip_model_from_ldm(
     ):
         diffusers_format_checkpoint = convert_ldm_clip_checkpoint(checkpoint, "text_encoders.clip_l.transformer.")
         diffusers_format_checkpoint["text_projection.weight"] = Parameter(
-            ops.eye(position_embedding_dim), name="text_projection.weight"
+            mint.eye(position_embedding_dim), name="text_projection.weight"
         )
 
     elif is_open_clip_model(checkpoint):
@@ -1673,8 +1673,8 @@ def _legacy_load_safety_checker(local_files_only, mindspore_dtype):
 # in SD3 original implementation of AdaLayerNormContinuous, it split linear projection output into shift, scale;
 # while in diffusers it split into scale, shift. Here we swap the linear projection weights in order to be able to use diffusers implementation
 def swap_scale_shift(weight, dim):
-    shift, scale = weight.chunk(2, axis=0)
-    new_weight = ops.cat([scale, shift], axis=0)
+    shift, scale = mint.chunk(weight, 2, dim=0)
+    new_weight = mint.cat([scale, shift], dim=0)
     return new_weight
 
 
@@ -1716,53 +1716,53 @@ def convert_sd3_transformer_checkpoint_to_diffusers(checkpoint, **kwargs):
     # Transformer blocks 🎸.
     for i in range(num_layers):
         # Q, K, V
-        sample_q, sample_k, sample_v = ops.chunk(checkpoint.pop(f"joint_blocks.{i}.x_block.attn.qkv.weight"), 3, axis=0)
-        context_q, context_k, context_v = ops.chunk(
-            checkpoint.pop(f"joint_blocks.{i}.context_block.attn.qkv.weight"), 3, axis=0
+        sample_q, sample_k, sample_v = mint.chunk(checkpoint.pop(f"joint_blocks.{i}.x_block.attn.qkv.weight"), 3, dim=0)
+        context_q, context_k, context_v = mint.chunk(
+            checkpoint.pop(f"joint_blocks.{i}.context_block.attn.qkv.weight"), 3, dim=0
         )
-        sample_q_bias, sample_k_bias, sample_v_bias = ops.chunk(
-            checkpoint.pop(f"joint_blocks.{i}.x_block.attn.qkv.bias"), 3, axis=0
+        sample_q_bias, sample_k_bias, sample_v_bias = mint.chunk(
+            checkpoint.pop(f"joint_blocks.{i}.x_block.attn.qkv.bias"), 3, dim=0
         )
-        context_q_bias, context_k_bias, context_v_bias = ops.chunk(
-            checkpoint.pop(f"joint_blocks.{i}.context_block.attn.qkv.bias"), 3, axis=0
+        context_q_bias, context_k_bias, context_v_bias = mint.chunk(
+            checkpoint.pop(f"joint_blocks.{i}.context_block.attn.qkv.bias"), 3, dim=0
         )
 
         converted_state_dict[f"transformer_blocks.{i}.attn.to_q.weight"] = Parameter(
-            ops.cat([sample_q]), name=f"transformer_blocks.{i}.attn.to_q.weight"
+            mint.cat([sample_q]), name=f"transformer_blocks.{i}.attn.to_q.weight"
         )
         converted_state_dict[f"transformer_blocks.{i}.attn.to_q.bias"] = Parameter(
-            ops.cat([sample_q_bias]), name=f"transformer_blocks.{i}.attn.to_q.bias"
+            mint.cat([sample_q_bias]), name=f"transformer_blocks.{i}.attn.to_q.bias"
         )
         converted_state_dict[f"transformer_blocks.{i}.attn.to_k.weight"] = Parameter(
-            ops.cat([sample_k]), name=f"transformer_blocks.{i}.attn.to_k.weight"
+            mint.cat([sample_k]), name=f"transformer_blocks.{i}.attn.to_k.weight"
         )
         converted_state_dict[f"transformer_blocks.{i}.attn.to_k.bias"] = Parameter(
-            ops.cat([sample_k_bias]), name=f"transformer_blocks.{i}.attn.to_k.bias"
+            mint.cat([sample_k_bias]), name=f"transformer_blocks.{i}.attn.to_k.bias"
         )
         converted_state_dict[f"transformer_blocks.{i}.attn.to_v.weight"] = Parameter(
-            ops.cat([sample_v]), name=f"transformer_blocks.{i}.attn.to_v.weight"
+            mint.cat([sample_v]), name=f"transformer_blocks.{i}.attn.to_v.weight"
         )
         converted_state_dict[f"transformer_blocks.{i}.attn.to_v.bias"] = Parameter(
-            ops.cat([sample_v_bias]), name=f"transformer_blocks.{i}.attn.to_v.bias"
+            mint.cat([sample_v_bias]), name=f"transformer_blocks.{i}.attn.to_v.bias"
         )
 
         converted_state_dict[f"transformer_blocks.{i}.attn.add_q_proj.weight"] = Parameter(
-            ops.cat([context_q]), name=f"transformer_blocks.{i}.attn.add_q_proj.weight"
+            mint.cat([context_q]), name=f"transformer_blocks.{i}.attn.add_q_proj.weight"
         )
         converted_state_dict[f"transformer_blocks.{i}.attn.add_q_proj.bias"] = Parameter(
-            ops.cat([context_q_bias]), name=f"transformer_blocks.{i}.attn.add_q_proj.bias"
+            mint.cat([context_q_bias]), name=f"transformer_blocks.{i}.attn.add_q_proj.bias"
         )
         converted_state_dict[f"transformer_blocks.{i}.attn.add_k_proj.weight"] = Parameter(
-            ops.cat([context_k]), name=f"transformer_blocks.{i}.attn.add_k_proj.weight"
+            mint.cat([context_k]), name=f"transformer_blocks.{i}.attn.add_k_proj.weight"
         )
         converted_state_dict[f"transformer_blocks.{i}.attn.add_k_proj.bias"] = Parameter(
-            ops.cat([context_k_bias]), name=f"transformer_blocks.{i}.attn.add_k_proj.bias"
+            mint.cat([context_k_bias]), name=f"transformer_blocks.{i}.attn.add_k_proj.bias"
         )
         converted_state_dict[f"transformer_blocks.{i}.attn.add_v_proj.weight"] = Parameter(
-            ops.cat([context_v]), name=f"transformer_blocks.{i}.attn.add_v_proj.weight"
+            mint.cat([context_v]), name=f"transformer_blocks.{i}.attn.add_v_proj.weight"
         )
         converted_state_dict[f"transformer_blocks.{i}.attn.add_v_proj.bias"] = Parameter(
-            ops.cat([context_v_bias]), name=f"transformer_blocks.{i}.attn.add_v_proj.bias"
+            mint.cat([context_v_bias]), name=f"transformer_blocks.{i}.attn.add_v_proj.bias"
         )
 
         # output projections.
@@ -1945,8 +1945,8 @@ def convert_flux_transformer_checkpoint_to_diffusers(checkpoint, **kwargs):
     # in SD3 original implementation of AdaLayerNormContinuous, it split linear projection output into shift, scale;
     # while in diffusers it split into scale, shift. Here we swap the linear projection weights in order to be able to use diffusers implementation
     def swap_scale_shift(weight):
-        shift, scale = weight.chunk(2, axis=0)
-        new_weight = ops.cat([scale, shift], axis=0)
+        shift, scale = mint.chunk(weight, 2, dim=0)
+        new_weight = mint.cat([scale, shift], dim=0)
         return new_weight
 
     ## time_text_embed.timestep_embedder <-  time_in  # noqa: E266
@@ -2006,49 +2006,49 @@ def convert_flux_transformer_checkpoint_to_diffusers(checkpoint, **kwargs):
             f"double_blocks.{i}.txt_mod.lin.bias"
         )
         # Q, K, V
-        sample_q, sample_k, sample_v = ops.chunk(checkpoint.pop(f"double_blocks.{i}.img_attn.qkv.weight"), 3, axis=0)
-        context_q, context_k, context_v = ops.chunk(checkpoint.pop(f"double_blocks.{i}.txt_attn.qkv.weight"), 3, axis=0)
-        sample_q_bias, sample_k_bias, sample_v_bias = ops.chunk(
-            checkpoint.pop(f"double_blocks.{i}.img_attn.qkv.bias"), 3, axis=0
+        sample_q, sample_k, sample_v = mint.chunk(checkpoint.pop(f"double_blocks.{i}.img_attn.qkv.weight"), 3, dim=0)
+        context_q, context_k, context_v = mint.chunk(checkpoint.pop(f"double_blocks.{i}.txt_attn.qkv.weight"), 3, dim=0)
+        sample_q_bias, sample_k_bias, sample_v_bias = mint.chunk(
+            checkpoint.pop(f"double_blocks.{i}.img_attn.qkv.bias"), 3, dim=0
         )
-        context_q_bias, context_k_bias, context_v_bias = ops.chunk(
-            checkpoint.pop(f"double_blocks.{i}.txt_attn.qkv.bias"), 3, axis=0
+        context_q_bias, context_k_bias, context_v_bias = mint.chunk(
+            checkpoint.pop(f"double_blocks.{i}.txt_attn.qkv.bias"), 3, dim=0
         )
         converted_state_dict[f"{block_prefix}attn.to_q.weight"] = Parameter(
-            ops.cat([sample_q]), name=f"{block_prefix}attn.to_q.weight"
+            mint.cat([sample_q]), name=f"{block_prefix}attn.to_q.weight"
         )
         converted_state_dict[f"{block_prefix}attn.to_q.bias"] = Parameter(
-            ops.cat([sample_q_bias]), name=f"{block_prefix}attn.to_q.bias"
+            mint.cat([sample_q_bias]), name=f"{block_prefix}attn.to_q.bias"
         )
         converted_state_dict[f"{block_prefix}attn.to_k.weight"] = Parameter(
-            ops.cat([sample_k]), name=f"{block_prefix}attn.to_k.weight"
+            mint.cat([sample_k]), name=f"{block_prefix}attn.to_k.weight"
         )
         converted_state_dict[f"{block_prefix}attn.to_k.bias"] = Parameter(
-            ops.cat([sample_k_bias]), name=f"{block_prefix}attn.to_k.bias"
+            mint.cat([sample_k_bias]), name=f"{block_prefix}attn.to_k.bias"
         )
         converted_state_dict[f"{block_prefix}attn.to_v.weight"] = Parameter(
-            ops.cat([sample_v]), name=f"{block_prefix}attn.to_v.weight"
+            mint.cat([sample_v]), name=f"{block_prefix}attn.to_v.weight"
         )
         converted_state_dict[f"{block_prefix}attn.to_v.bias"] = Parameter(
-            ops.cat([sample_v_bias]), name=f"{block_prefix}attn.to_v.bias"
+            mint.cat([sample_v_bias]), name=f"{block_prefix}attn.to_v.bias"
         )
         converted_state_dict[f"{block_prefix}attn.add_q_proj.weight"] = Parameter(
-            ops.cat([context_q]), name=f"{block_prefix}attn.add_q_proj.weight"
+            mint.cat([context_q]), name=f"{block_prefix}attn.add_q_proj.weight"
         )
         converted_state_dict[f"{block_prefix}attn.add_q_proj.bias"] = Parameter(
-            ops.cat([context_q_bias]), name=f"{block_prefix}attn.add_q_proj.bias"
+            mint.cat([context_q_bias]), name=f"{block_prefix}attn.add_q_proj.bias"
         )
         converted_state_dict[f"{block_prefix}attn.add_k_proj.weight"] = Parameter(
-            ops.cat([context_k]), name=f"{block_prefix}attn.add_k_proj.weight"
+            mint.cat([context_k]), name=f"{block_prefix}attn.add_k_proj.weight"
         )
         converted_state_dict[f"{block_prefix}attn.add_k_proj.bias"] = Parameter(
-            ops.cat([context_k_bias]), name=f"{block_prefix}attn.add_k_proj.bias"
+            mint.cat([context_k_bias]), name=f"{block_prefix}attn.add_k_proj.bias"
         )
         converted_state_dict[f"{block_prefix}attn.add_v_proj.weight"] = Parameter(
-            ops.cat([context_v]), name=f"{block_prefix}attn.add_v_proj.weight"
+            mint.cat([context_v]), name=f"{block_prefix}attn.add_v_proj.weight"
         )
         converted_state_dict[f"{block_prefix}attn.add_v_proj.bias"] = Parameter(
-            ops.cat([context_v_bias]), name=f"{block_prefix}attn.add_v_proj.bias"
+            mint.cat([context_v_bias]), name=f"{block_prefix}attn.add_v_proj.bias"
         )
         # qk_norm
         converted_state_dict[f"{block_prefix}attn.norm_q.weight"] = checkpoint.pop(
@@ -2109,33 +2109,33 @@ def convert_flux_transformer_checkpoint_to_diffusers(checkpoint, **kwargs):
         # Q, K, V, mlp
         mlp_hidden_dim = int(inner_dim * mlp_ratio)
         split_size = (inner_dim, inner_dim, inner_dim, mlp_hidden_dim)
-        q, k, v, mlp = ops.split(checkpoint.pop(f"single_blocks.{i}.linear1.weight"), split_size, axis=0)
-        q_bias, k_bias, v_bias, mlp_bias = ops.split(
-            checkpoint.pop(f"single_blocks.{i}.linear1.bias"), split_size, axis=0
+        q, k, v, mlp = mint.split(checkpoint.pop(f"single_blocks.{i}.linear1.weight"), split_size, dim=0)
+        q_bias, k_bias, v_bias, mlp_bias = mint.split(
+            checkpoint.pop(f"single_blocks.{i}.linear1.bias"), split_size, dim=0
         )
         converted_state_dict[f"{block_prefix}attn.to_q.weight"] = Parameter(
-            ops.cat([q]), name=f"{block_prefix}attn.to_q.weight"
+            mint.cat([q]), name=f"{block_prefix}attn.to_q.weight"
         )
         converted_state_dict[f"{block_prefix}attn.to_q.bias"] = Parameter(
-            ops.cat([q_bias]), name=f"{block_prefix}attn.to_q.bias"
+            mint.cat([q_bias]), name=f"{block_prefix}attn.to_q.bias"
         )
         converted_state_dict[f"{block_prefix}attn.to_k.weight"] = Parameter(
-            ops.cat([k]), name=f"{block_prefix}attn.to_k.weight"
+            mint.cat([k]), name=f"{block_prefix}attn.to_k.weight"
         )
         converted_state_dict[f"{block_prefix}attn.to_k.bias"] = Parameter(
-            ops.cat([k_bias]), name=f"{block_prefix}attn.to_k.bias"
+            mint.cat([k_bias]), name=f"{block_prefix}attn.to_k.bias"
         )
         converted_state_dict[f"{block_prefix}attn.to_v.weight"] = Parameter(
-            ops.cat([v]), name=f"{block_prefix}attn.to_v.weight"
+            mint.cat([v]), name=f"{block_prefix}attn.to_v.weight"
         )
         converted_state_dict[f"{block_prefix}attn.to_v.bias"] = Parameter(
-            ops.cat([v_bias]), name=f"{block_prefix}attn.to_v.bias"
+            mint.cat([v_bias]), name=f"{block_prefix}attn.to_v.bias"
         )
         converted_state_dict[f"{block_prefix}proj_mlp.weight"] = Parameter(
-            ops.cat([mlp]), name=f"{block_prefix}proj_mlp.weight"
+            mint.cat([mlp]), name=f"{block_prefix}proj_mlp.weight"
         )
         converted_state_dict[f"{block_prefix}proj_mlp.bias"] = Parameter(
-            ops.cat([mlp_bias]), name=f"{block_prefix}proj_mlp.bias"
+            mint.cat([mlp_bias]), name=f"{block_prefix}proj_mlp.bias"
         )
         # qk norm
         converted_state_dict[f"{block_prefix}attn.norm_q.weight"] = checkpoint.pop(

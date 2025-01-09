@@ -51,7 +51,7 @@ from transformers.utils import (
 from transformers.utils.hub import convert_file_size_to_int, get_checkpoint_shard_files
 
 import mindspore as ms
-from mindspore import Tensor, nn, ops
+from mindspore import Tensor, nn, mint
 
 from .integrations import PeftAdapterMixin
 from .modeling_attn_mask_utils import dtype_to_min
@@ -72,7 +72,7 @@ def _get_pt2ms_mappings(m):
     for name, cell in m.cells_and_names():
         if isinstance(cell, (nn.Conv1d, nn.Conv1dTranspose)):
             mappings[f"{name}.weight"] = f"{name}.weight", lambda x: ms.Parameter(
-                ops.expand_dims(x, axis=-2), name=x.name
+                mint.unsqueeze(x, dim=-2), name=x.name
             )
         elif isinstance(cell, nn.Embedding):
             mappings[f"{name}.weight"] = f"{name}.embedding_table", lambda x: x
@@ -374,22 +374,22 @@ class ModuleUtilsMixin:
     @staticmethod
     def create_extended_attention_mask_for_decoder(input_shape, attention_mask):
         batch_size, seq_length = input_shape
-        seq_ids = ops.arange(seq_length)
+        seq_ids = mint.arange(seq_length)
         causal_mask = seq_ids[None, None, :].tile((batch_size, seq_length, 1)) <= seq_ids[None, :, None]
         causal_mask = causal_mask.to(attention_mask.dtype)
 
         if causal_mask.shape[1] < attention_mask.shape[1]:
             prefix_seq_len = attention_mask.shape[1] - causal_mask.shape[1]
-            causal_mask = ops.cat(
+            causal_mask = mint.cat(
                 [
-                    ops.ones((batch_size, seq_length, prefix_seq_len), dtype=causal_mask.dtype),
+                    mint.ones((batch_size, seq_length, prefix_seq_len), dtype=causal_mask.dtype),
                     causal_mask,
                 ],
-                axis=-1,
+                dim=-1,
             )
 
         # extended_attention_mask = causal_mask[:, None, :, :] * attention_mask[:, None, None, :]
-        extended_attention_mask = ops.mul(causal_mask.unsqueeze(1), attention_mask.unsqueeze(1).unsqueeze(1))
+        extended_attention_mask = mint.mul(causal_mask.unsqueeze(1), attention_mask.unsqueeze(1).unsqueeze(1))
         return extended_attention_mask
 
     def get_extended_attention_mask(
@@ -495,7 +495,7 @@ class ModuleUtilsMixin:
             embedding_param_names = [
                 f"{name}.weight"
                 for name, module_type in self.cells_and_names()
-                if isinstance(module_type, nn.Embedding)
+                if isinstance(module_type, mint.nn.Embedding)
             ]
             total_parameters = [
                 parameter for name, parameter in self.parameters_and_names() if name not in embedding_param_names
@@ -668,7 +668,7 @@ class MSPreTrainedModel(nn.Cell, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
     def resize_token_embeddings(
         self, new_num_tokens: Optional[int] = None, pad_to_multiple_of: Optional[int] = None
-    ) -> nn.Embedding:
+    ) -> mint.nn.Embedding:
         """
         Resizes input token embeddings matrix of the model if `new_num_tokens != config.vocab_size`.
 
@@ -678,13 +678,13 @@ class MSPreTrainedModel(nn.Cell, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             new_num_tokens (`int`, *optional*):
                 The new number of tokens in the embedding matrix. Increasing the size will add newly initialized
                 vectors at the end. Reducing the size will remove vectors from the end. If not provided or `None`, just
-                returns a pointer to the input tokens `torch.nn.Embedding` module of the model without doing anything.
+                returns a pointer to the input tokens `mint.nn.Embedding` module of the model without doing anything.
             pad_to_multiple_of (`int`, *optional*):
                 If set will pad the embedding matrix to a multiple of the provided value.If `new_num_tokens` is set to
                 `None` will just pad the embedding to a multiple of `pad_to_multiple_of`.
 
         Return:
-            `mindspore.nn.Embedding`: Pointer to the input tokens Embeddings Module of the model.
+            `mindspore.mint.nn.Embedding`: Pointer to the input tokens Embeddings Module of the model.
         """
         model_embeds = self._resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
         if new_num_tokens is None and pad_to_multiple_of is None:
@@ -720,29 +720,29 @@ class MSPreTrainedModel(nn.Cell, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
     def _get_resized_embeddings(
         self,
-        old_embeddings: nn.Embedding,
+        old_embeddings: mint.nn.Embedding,
         new_num_tokens: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
-    ) -> nn.Embedding:
+    ) -> mint.nn.Embedding:
         """
         Build a resized Embedding Module from a provided token Embedding Module. Increasing the size will add newly
         initialized vectors at the end. Reducing the size will remove vectors from the end
 
         Args:
-            old_embeddings (`mindspore.nn.Embedding`):
+            old_embeddings (`mindspore.mint.nn.Embedding`):
                 Old embeddings to be resized.
             new_num_tokens (`int`, *optional*):
                 New number of tokens in the embedding matrix.
 
                 Increasing the size will add newly initialized vectors at the end. Reducing the size will remove
                 vectors from the end. If not provided or `None`, just returns a pointer to the input tokens
-                `torch.nn.Embedding` module of the model without doing anything.
+                `mint.nn.Embedding` module of the model without doing anything.
             pad_to_multiple_of (`int`, *optional*):
                 If set will pad the embedding matrix to a multiple of the provided value. If `new_num_tokens` is set to
                 `None` will just pad the embedding to a multiple of `pad_to_multiple_of`.
 
         Return:
-            `mindspore.nn.Embedding`: Pointer to the resized Embedding Module or the old Embedding Module if
+            `mindspore.mint.nn.Embedding`: Pointer to the resized Embedding Module or the old Embedding Module if
             `new_num_tokens` is `None`
         """
 
@@ -770,15 +770,15 @@ class MSPreTrainedModel(nn.Cell, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         if old_num_tokens == new_num_tokens:
             return old_embeddings
 
-        if not isinstance(old_embeddings, nn.Embedding):
+        if not isinstance(old_embeddings, mint.nn.Embedding):
             raise TypeError(
-                f"Old embeddings are of type {type(old_embeddings)}, which is not an instance of {nn.Embedding}. You"
+                f"Old embeddings are of type {type(old_embeddings)}, which is not an instance of {mint.nn.Embedding}. You"
                 " should either use a different resize function or make sure that `old_embeddings` are an instance of"
-                f" {nn.Embedding}."
+                f" {mint.nn.Embedding}."
             )
 
         # Build new embeddings
-        new_embeddings = nn.Embedding(
+        new_embeddings = mint.nn.Embedding(
             new_num_tokens,
             old_embedding_dim,
         )
@@ -795,26 +795,26 @@ class MSPreTrainedModel(nn.Cell, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         return new_embeddings
 
     def _get_resized_lm_head(
-        self, old_lm_head: nn.Dense, new_num_tokens: Optional[int] = None, transposed: Optional[bool] = False
+        self, old_lm_head: mint.nn.Linear, new_num_tokens: Optional[int] = None, transposed: Optional[bool] = False
     ) -> nn.Dense:
         """
         Build a resized Linear Module from a provided old Linear Module. Increasing the size will add newly initialized
         vectors at the end. Reducing the size will remove vectors from the end
 
         Args:
-            old_lm_head (`mindspore.nn.Dense`):
+            old_lm_head (`mindspore.mint.nn.Linear`):
                 Old lm head liner layer to be resized.
             new_num_tokens (`int`, *optional*):
                 New number of tokens in the linear matrix.
 
                 Increasing the size will add newly initialized vectors at the end. Reducing the size will remove
                 vectors from the end. If not provided or `None`, just returns a pointer to the input tokens
-                `mindspore.nn.Dense` module of the model without doing anything. transposed (`bool`, *optional*, defaults
+                `mindspore.mint.nn.Linear` module of the model without doing anything. transposed (`bool`, *optional*, defaults
                 to `False`): Whether `old_lm_head` is transposed or not. If True `old_lm_head.size()` is `lm_head_dim,
                 vocab_size` else `vocab_size, lm_head_dim`.
 
         Return:
-            `mindspore.nn.Dense`: Pointer to the resized Linear Module or the old Linear Module if `new_num_tokens` is
+            `mindspore.mint.nn.Linear`: Pointer to the resized Linear Module or the old Linear Module if `new_num_tokens` is
             `None`
         """
         if new_num_tokens is None:
@@ -827,18 +827,18 @@ class MSPreTrainedModel(nn.Cell, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         if old_num_tokens == new_num_tokens:
             return old_lm_head
 
-        if not isinstance(old_lm_head, nn.Dense):
+        if not isinstance(old_lm_head, mint.nn.Linear):
             raise TypeError(
-                f"Old language model head is of type {type(old_lm_head)}, which is not an instance of {nn.Dense}. You"
+                f"Old language model head is of type {type(old_lm_head)}, which is not an instance of {mint.nn.Linear}. You"
                 " should either use a different resize function or make sure that `old_lm_head` are an instance of"
-                f" {nn.Dense}."
+                f" {mint.nn.Linear}."
             )
 
         # Build new lm head
         new_lm_head_shape = (old_lm_head_dim, new_num_tokens) if not transposed else (new_num_tokens, old_lm_head_dim)
         has_new_lm_head_bias = old_lm_head.bias is not None
 
-        new_lm_head = nn.Dense(
+        new_lm_head = mint.nn.Linear(
             *new_lm_head_shape,
             bias=has_new_lm_head_bias,
             dtype=old_lm_head.weight.dtype,
@@ -873,7 +873,7 @@ class MSPreTrainedModel(nn.Cell, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             f"overwrite this method in the class {self.__class__} in `modeling_{self.__class__.__module__}.py`"
         )
 
-    def get_position_embeddings(self) -> Union[nn.Embedding, Tuple[nn.Embedding]]:
+    def get_position_embeddings(self) -> Union[mint.nn.Embedding, Tuple[mint.nn.Embedding]]:
         raise NotImplementedError(
             f"`get_position_embeddings` is not implemented for {self.__class__}`. To implement it, you should "
             f"overwrite this method in the class {self.__class__} in `modeling_{self.__class__.__module__}.py`"

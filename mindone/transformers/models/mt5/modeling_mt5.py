@@ -22,8 +22,7 @@ from transformers.models.mt5.configuration_mt5 import MT5Config
 from transformers.utils import DUMMY_INPUTS, DUMMY_MASK, logging
 
 import mindspore as ms
-import mindspore.nn as nn
-from mindspore import Parameter, Tensor, ops
+from mindspore import nn, ops, mint, Parameter, Tensor
 
 from ...activations import ACT2FN
 from ...mindspore_utils import find_pruneable_heads_and_indices, prune_linear_layer
@@ -71,7 +70,7 @@ class MT5LayerNorm(nn.Cell):
         # half-precision inputs is done in fp32
 
         variance = hidden_states.to(ms.float32).pow(2).mean(-1, keep_dims=True)
-        hidden_states = hidden_states * ops.rsqrt(variance + self.variance_epsilon)
+        hidden_states = hidden_states * mint.rsqrt(variance + self.variance_epsilon)
 
         # convert into half-precision if necessary
         if self.weight.dtype in [ms.float16, ms.bfloat16]:
@@ -84,9 +83,9 @@ class MT5LayerNorm(nn.Cell):
 class MT5DenseActDense(nn.Cell):
     def __init__(self, config: MT5Config):
         super().__init__()
-        self.wi = nn.Dense(config.d_model, config.d_ff, has_bias=False)
-        self.wo = nn.Dense(config.d_ff, config.d_model, has_bias=False)
-        self.dropout = nn.Dropout(p=config.dropout_rate)
+        self.wi = mint.nn.Linear(config.d_model, config.d_ff, bias=False)
+        self.wo = mint.nn.Linear(config.d_ff, config.d_model, bias=False)
+        self.dropout = mint.nn.Dropout(p=config.dropout_rate)
         self.act = ACT2FN[config.dense_act_fn]
 
     def construct(self, hidden_states):
@@ -107,10 +106,10 @@ class MT5DenseActDense(nn.Cell):
 class MT5DenseGatedActDense(nn.Cell):
     def __init__(self, config: MT5Config):
         super().__init__()
-        self.wi_0 = nn.Dense(config.d_model, config.d_ff, has_bias=False)
-        self.wi_1 = nn.Dense(config.d_model, config.d_ff, has_bias=False)
-        self.wo = nn.Dense(config.d_ff, config.d_model, has_bias=False)
-        self.dropout = nn.Dropout(p=config.dropout_rate)
+        self.wi_0 = mint.nn.Linear(config.d_model, config.d_ff, bias=False)
+        self.wi_1 = mint.nn.Linear(config.d_model, config.d_ff, bias=False)
+        self.wo = mint.nn.Linear(config.d_ff, config.d_model, bias=False)
+        self.dropout = mint.nn.Dropout(p=config.dropout_rate)
         self.act = ACT2FN[config.dense_act_fn]
 
     def construct(self, hidden_states):
@@ -140,7 +139,7 @@ class MT5LayerFF(nn.Cell):
             self.DenseReluDense = MT5DenseActDense(config)
 
         self.layer_norm = MT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
-        self.dropout = nn.Dropout(p=config.dropout_rate)
+        self.dropout = mint.nn.Dropout(p=config.dropout_rate)
 
     def construct(self, hidden_states):
         forwarded_states = self.layer_norm(hidden_states)
@@ -164,13 +163,13 @@ class MT5Attention(nn.Cell):
         self.inner_dim = self.n_heads * self.key_value_proj_dim
 
         # Mesh TensorFlow initialization to avoid scaling before softmax
-        self.q = nn.Dense(self.d_model, self.inner_dim, has_bias=False)
-        self.k = nn.Dense(self.d_model, self.inner_dim, has_bias=False)
-        self.v = nn.Dense(self.d_model, self.inner_dim, has_bias=False)
-        self.o = nn.Dense(self.inner_dim, self.d_model, has_bias=False)
+        self.q = mint.nn.Linear(self.d_model, self.inner_dim, bias=False)
+        self.k = mint.nn.Linear(self.d_model, self.inner_dim, bias=False)
+        self.v = mint.nn.Linear(self.d_model, self.inner_dim, bias=False)
+        self.o = mint.nn.Linear(self.inner_dim, self.d_model, bias=False)
 
         if self.has_relative_attention_bias:
-            self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
+            self.relative_attention_bias = mint.nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
         self.pruned_heads = set()
         self.gradient_checkpointing = False
 
@@ -214,9 +213,9 @@ class MT5Attention(nn.Cell):
         if bidirectional:
             num_buckets //= 2
             relative_buckets += (relative_position > 0).long() * num_buckets
-            relative_position = ops.abs(relative_position)
+            relative_position = mint.abs(relative_position)
         else:
-            relative_position = -ops.minimum(relative_position, ops.zeros_like(relative_position))
+            relative_position = -mint.minimum(relative_position, ops.zeros_like(relative_position))
         # now relative_position is in the range [0, inf)
 
         # half of the buckets are for exact increments in positions
@@ -227,24 +226,24 @@ class MT5Attention(nn.Cell):
         relative_position_if_large = (
             max_exact
             + (
-                ops.log(relative_position.float() / max_exact)
-                / ops.log(Tensor(max_distance, ms.float32) / max_exact)
+                mint.log(relative_position.float() / max_exact)
+                / mint.log(Tensor(max_distance, ms.float32) / max_exact)
                 * (num_buckets - max_exact)
             ).long()
         )
 
-        relative_position_if_large = ops.minimum(
-            relative_position_if_large, ops.full_like(relative_position_if_large, num_buckets - 1)
+        relative_position_if_large = mint.minimum(
+            relative_position_if_large, mint.full_like(relative_position_if_large, num_buckets - 1)
         )
 
-        relative_buckets += ops.where(is_small, relative_position, relative_position_if_large)
+        relative_buckets += mint.where(is_small, relative_position, relative_position_if_large)
 
         return relative_buckets
 
     def compute_bias(self, query_length, key_length):
         """Compute binned relative position bias"""
-        context_position = ops.arange(query_length, dtype=ms.int64)[:, None]
-        memory_position = ops.arange(key_length, dtype=ms.int64)[None, :]
+        context_position = mint.arange(query_length, dtype=ms.int64)[:, None]
+        memory_position = mint.arange(key_length, dtype=ms.int64)[None, :]
         relative_position = memory_position - context_position  # shape (query_length, key_length)
         relative_position_bucket = self._relative_position_bucket(
             relative_position,  # shape (query_length, key_length)
@@ -310,7 +309,7 @@ class MT5Attention(nn.Cell):
                 if key_value_states is None:
                     # self-attn
                     # (batch_size, n_heads, key_length, dim_per_head)
-                    hidden_states = ops.cat([past_key_value, hidden_states], axis=2)
+                    hidden_states = mint.cat([past_key_value, hidden_states], axis=2)
                 elif past_key_value.shape[2] != key_value_states.shape[1]:
                     # checking that the `sequence_length` of the `past_key_value` is the same as
                     # the provided `key_value_states` to support prefix tuning
@@ -334,13 +333,13 @@ class MT5Attention(nn.Cell):
         )
 
         # compute scores
-        scores = ops.matmul(
+        scores = mint.matmul(
             query_states, key_states.swapaxes(3, 2)
-        )  # equivalent of ops.einsum("bnqd,bnkd->bnqk", query_states, key_states), compatible with onnx op>9
+        )  # equivalent of mint.einsum("bnqd,bnkd->bnqk", query_states, key_states), compatible with onnx op>9
 
         if position_bias is None:
             if not self.has_relative_attention_bias:
-                position_bias = ops.zeros((1, self.n_heads, real_seq_length, key_length), dtype=scores.dtype)
+                position_bias = mint.zeros((1, self.n_heads, real_seq_length, key_length), dtype=scores.dtype)
                 if self.gradient_checkpointing and self.training:
                     position_bias.requires_grad = True
             else:
@@ -355,25 +354,25 @@ class MT5Attention(nn.Cell):
                 position_bias = position_bias + mask  # (batch_size, n_heads, seq_length, key_length)
 
         if self.pruned_heads:
-            mask = ops.ones(position_bias.shape[1])
+            mask = mint.ones(position_bias.shape[1])
             mask[list(self.pruned_heads)] = 0
             position_bias_masked = position_bias[:, mask.bool()]
         else:
             position_bias_masked = position_bias
 
         scores += position_bias_masked
-        attn_weights = ops.softmax(scores.float(), axis=-1).type_as(
+        attn_weights = mint.nn.Softmax(dim=-1)(scores.float()).type_as(
             scores
         )  # (batch_size, n_heads, seq_length, key_length)
-        attn_weights = ops.dropout(
-            attn_weights, p=self.dropout, training=self.training
-        )  # (batch_size, n_heads, seq_length, key_length)
+        if self.training:
+            attn_weights = mint.nn.Dropout(p=self.dropout)(attn_weights)
+            # (batch_size, n_heads, seq_length, key_length)
 
         # Mask heads if we want to
         if layer_head_mask is not None:
             attn_weights = attn_weights * layer_head_mask
 
-        attn_output = unshape(ops.matmul(attn_weights, value_states))  # (batch_size, seq_length, dim)
+        attn_output = unshape(mint.matmul(attn_weights, value_states))  # (batch_size, seq_length, dim)
         attn_output = self.o(attn_output)
 
         present_key_value_state = (key_states, value_states) if (self.is_decoder and use_cache) else None
@@ -390,7 +389,7 @@ class MT5LayerSelfAttention(nn.Cell):
         super().__init__()
         self.SelfAttention = MT5Attention(config, has_relative_attention_bias=has_relative_attention_bias)
         self.layer_norm = MT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
-        self.dropout = nn.Dropout(p=config.dropout_rate)
+        self.dropout = mint.nn.Dropout(p=config.dropout_rate)
 
     def construct(
         self,
@@ -423,7 +422,7 @@ class MT5LayerCrossAttention(nn.Cell):
         super().__init__()
         self.EncDecAttention = MT5Attention(config, has_relative_attention_bias=False)
         self.layer_norm = MT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
-        self.dropout = nn.Dropout(p=config.dropout_rate)
+        self.dropout = mint.nn.Dropout(p=config.dropout_rate)
 
     def construct(
         self,
@@ -512,12 +511,12 @@ class MT5Block(nn.Cell):
 
         # clamp inf values to enable fp16 training
         if hidden_states.dtype == ms.float16:
-            clamp_value = ops.where(
-                ops.isinf(hidden_states).any(),
+            clamp_value = mint.where(
+                mint.isinf(hidden_states).any(),
                 Tensor([64504]),  # torch.finfo(torch.float16).max - 1000
                 Tensor([65504]),  # torch.finfo(torch.float16).max is 65504
             )
-            hidden_states = ops.clamp(hidden_states, min=-clamp_value, max=clamp_value)
+            hidden_states = mint.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
         do_cross_attention = self.is_decoder and encoder_hidden_states is not None
         if do_cross_attention:
@@ -543,12 +542,12 @@ class MT5Block(nn.Cell):
 
             # clamp inf values to enable fp16 training
             if hidden_states.dtype == ms.float16:
-                clamp_value = ops.where(
-                    ops.isinf(hidden_states).any(),
+                clamp_value = mint.where(
+                    mint.isinf(hidden_states).any(),
                     Tensor([64504]),  # torch.finfo(torch.float16).max - 1000
                     Tensor([65504]),  # torch.finfo(torch.float16).max is 65504
                 )
-                hidden_states = ops.clamp(hidden_states, min=-clamp_value, max=clamp_value)
+                hidden_states = mint.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
             # Combine self attn and cross attn key value states
             if present_key_value_state is not None:
@@ -562,12 +561,12 @@ class MT5Block(nn.Cell):
 
         # clamp inf values to enable fp16 training
         if hidden_states.dtype == ms.float16:
-            clamp_value = ops.where(
-                ops.isinf(hidden_states).any(),
+            clamp_value = mint.where(
+                mint.isinf(hidden_states).any(),
                 Tensor([64504]),
                 Tensor([65504]),
             )
-            hidden_states = ops.clamp(hidden_states, min=-clamp_value, max=clamp_value)
+            hidden_states = mint.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
         outputs = (hidden_states,)
 
@@ -587,14 +586,14 @@ class MT5ClassificationHead(nn.Cell):
 
     def __init__(self, config: MT5Config):
         super().__init__()
-        self.dense = nn.Dense(config.d_model, config.d_model)
-        self.dropout = nn.Dropout(p=config.classifier_dropout)
-        self.out_proj = nn.Dense(config.d_model, config.num_labels)
+        self.dense = mint.nn.Linear(config.d_model, config.d_model)
+        self.dropout = mint.nn.Dropout(p=config.classifier_dropout)
+        self.out_proj = mint.nn.Linear(config.d_model, config.num_labels)
 
     def construct(self, hidden_states: Tensor) -> Tensor:
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.dense(hidden_states)
-        hidden_states = ops.tanh(hidden_states)
+        hidden_states = mint.tanh(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.out_proj(hidden_states)
         return hidden_states
@@ -665,7 +664,7 @@ class MT5Stack(MT5PreTrainedModel):
             [MT5Block(config, has_relative_attention_bias=bool(i == 0)) for i in range(config.num_layers)]
         )
         self.final_layer_norm = MT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
-        self.dropout = nn.Dropout(p=config.dropout_rate)
+        self.dropout = mint.nn.Dropout(p=config.dropout_rate)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -737,7 +736,7 @@ class MT5Stack(MT5PreTrainedModel):
             past_key_values = [None] * len(self.block)
 
         if attention_mask is None:
-            attention_mask = ops.ones((batch_size, mask_seq_length))
+            attention_mask = mint.ones((batch_size, mask_seq_length))
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
@@ -749,7 +748,7 @@ class MT5Stack(MT5PreTrainedModel):
             encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.shape
             encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
             if encoder_attention_mask is None:
-                encoder_attention_mask = ops.ones(encoder_hidden_shape, dtype=ms.int64)
+                encoder_attention_mask = mint.ones(encoder_hidden_shape, dtype=ms.int64)
             encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
         else:
             encoder_extended_attention_mask = None
@@ -855,7 +854,7 @@ class MT5Model(MT5PreTrainedModel):
 
     def __init__(self, config: MT5Config):
         super().__init__(config)
-        self.shared = nn.Embedding(config.vocab_size, config.d_model)
+        self.shared = mint.nn.Embedding(config.vocab_size, config.d_model)
 
         encoder_config = copy.deepcopy(config)
         encoder_config.is_decoder = False
@@ -1007,7 +1006,7 @@ class MT5ForConditionalGeneration(MT5PreTrainedModel):
         super().__init__(config)
         self.model_dim = config.d_model
 
-        self.shared = nn.Embedding(config.vocab_size, config.d_model)
+        self.shared = mint.nn.Embedding(config.vocab_size, config.d_model)
 
         encoder_config = copy.deepcopy(config)
         encoder_config.is_decoder = False
@@ -1021,7 +1020,7 @@ class MT5ForConditionalGeneration(MT5PreTrainedModel):
         decoder_config.num_layers = config.num_decoder_layers
         self.decoder = MT5Stack(decoder_config, self.shared)
 
-        self.lm_head = nn.Dense(config.d_model, config.vocab_size, has_bias=False)
+        self.lm_head = mint.nn.Linear(config.d_model, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1175,7 +1174,7 @@ class MT5EncoderModel(MT5PreTrainedModel):
 
     def __init__(self, config: MT5Config):
         super().__init__(config)
-        self.shared = nn.Embedding(config.vocab_size, config.d_model)
+        self.shared = mint.nn.Embedding(config.vocab_size, config.d_model)
 
         encoder_config = copy.deepcopy(config)
         encoder_config.use_cache = False

@@ -15,7 +15,7 @@
 import math
 from collections import OrderedDict
 
-from mindspore import Tensor, nn, ops
+from mindspore import Tensor, nn, ops, mint
 
 
 class PytorchGELUTanh(nn.Cell):
@@ -28,7 +28,7 @@ class PytorchGELUTanh(nn.Cell):
     """
 
     def construct(self, input: Tensor) -> Tensor:
-        return ops.gelu(input, approximate="tanh")
+        return mint.functional.gelu(input, approximate="tanh")
 
 
 class NewGELUActivation(nn.Cell):
@@ -39,7 +39,7 @@ class NewGELUActivation(nn.Cell):
 
     def construct(self, input: Tensor) -> Tensor:
         return (
-            0.5 * input * (1.0 + ops.tanh(ops.sqrt(Tensor(2.0 / math.pi)) * (input + 0.044715 * ops.pow(input, 3.0))))
+            0.5 * input * (1.0 + mint.tanh(ops.sqrt(Tensor(2.0 / math.pi)) * (input + 0.044715 * mint.pow(input, 3.0))))
         )
 
 
@@ -56,10 +56,10 @@ class GELUActivation(nn.Cell):
         if use_gelu_python:
             self.act = self._gelu_python
         else:
-            self.act = ops.gelu
+            self.act = mint.nn.GELU()
 
     def _gelu_python(self, input: Tensor) -> Tensor:
-        return input * 0.5 * (1.0 + ops.erf(input / math.sqrt(2.0)))
+        return input * 0.5 * (1.0 + mint.erf(input / math.sqrt(2.0)))
 
     def construct(self, input: Tensor) -> Tensor:
         return self.act(input)
@@ -71,7 +71,7 @@ class FastGELUActivation(nn.Cell):
     """
 
     def construct(self, input: Tensor) -> Tensor:
-        return 0.5 * input * (1.0 + ops.tanh(input * 0.7978845608 * (1.0 + 0.044715 * input * input)))
+        return 0.5 * input * (1.0 + mint.tanh(input * 0.7978845608 * (1.0 + 0.044715 * input * input)))
 
 
 class QuickGELUActivation(nn.Cell):
@@ -80,7 +80,7 @@ class QuickGELUActivation(nn.Cell):
     """
 
     def construct(self, input: Tensor) -> Tensor:
-        return input * ops.sigmoid(1.702 * input)
+        return input * mint.sigmoid(1.702 * input)
 
 
 class ClippedGELUActivation(nn.Cell):
@@ -122,7 +122,7 @@ class AccurateGELUActivation(nn.Cell):
         self.precomputed_constant = math.sqrt(2 / math.pi)
 
     def construct(self, input: Tensor) -> Tensor:
-        return 0.5 * input * (1 + ops.tanh(self.precomputed_constant * (input + 0.044715 * ops.pow(input, 3))))
+        return 0.5 * input * (1 + mint.tanh(self.precomputed_constant * (input + 0.044715 * mint.pow(input, 3))))
 
 
 class SiLUActivation(nn.Cell):
@@ -135,7 +135,7 @@ class SiLUActivation(nn.Cell):
     """
 
     def construct(self, input: Tensor) -> Tensor:
-        return ops.silu(input)
+        return mint.nn.SiLU()(input)
 
 
 class MishActivation(nn.Cell):
@@ -145,7 +145,7 @@ class MishActivation(nn.Cell):
     """
 
     def construct(self, input: Tensor) -> Tensor:
-        return ops.mish(input)
+        return mint.nn.Mish()(input)
 
 
 class LinearActivation(nn.Cell):
@@ -167,7 +167,7 @@ class LaplaceActivation(nn.Cell):
 
     def construct(self, input, mu=0.707107, sigma=0.282095):
         input = (input - mu).div(sigma * math.sqrt(2.0))
-        return 0.5 * (1.0 + ops.erf(input))
+        return 0.5 * (1.0 + mint.erf(input))
 
 
 class ReLUSquaredActivation(nn.Cell):
@@ -176,8 +176,8 @@ class ReLUSquaredActivation(nn.Cell):
     """
 
     def construct(self, input):
-        relu_applied = ops.relu(input)
-        squared = ops.square(relu_applied)
+        relu_applied = mint.nn.Relu()(input)
+        squared = mint.square(relu_applied)
         return squared
 
 
@@ -200,13 +200,14 @@ ACT2CLS = {
     "linear": LinearActivation,
     "mish": MishActivation,
     "quick_gelu": QuickGELUActivation,
-    "relu": nn.ReLU,
+    "relu": mint.nn.ReLU,
     "relu2": ReLUSquaredActivation,
     "relu6": nn.ReLU6,
+    # TODO: sigmoid
     "sigmoid": nn.Sigmoid,
     "silu": SiLUActivation,
     "swish": SiLUActivation,
-    "tanh": nn.Tanh,
+    "tanh": mint.tanh,
 }
 ACT2FN = ClassInstantier(ACT2CLS)
 

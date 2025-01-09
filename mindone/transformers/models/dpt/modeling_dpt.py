@@ -28,7 +28,7 @@ from transformers.models.dpt.configuration_dpt import DPTConfig
 from transformers.utils import ModelOutput, logging
 
 import mindspore as ms
-from mindspore import nn, ops
+from mindspore import nn, ops, mint
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, DepthEstimatorOutput
@@ -139,23 +139,23 @@ class DPTViTHybridEmbeddings(nn.Cell):
         self.patch_size = patch_size[0]
         self.num_channels = num_channels
 
-        self.projection = nn.Conv2d(feature_dim, hidden_size, kernel_size=1, has_bias=True, pad_mode="valid")
+        self.projection = mint.nn.Conv2d(feature_dim, hidden_size, kernel_size=1, bias=True)
 
-        self.cls_token = ms.Parameter(ops.zeros((1, 1, config.hidden_size)))
-        self.position_embeddings = ms.Parameter(ops.zeros((1, num_patches + 1, config.hidden_size)))
+        self.cls_token = ms.Parameter(mint.zeros((1, 1, config.hidden_size)))
+        self.position_embeddings = ms.Parameter(mint.zeros((1, num_patches + 1, config.hidden_size)))
         self.posemb_shape_n = ms.Tensor(self.position_embeddings.shape[1], ms.float32)
 
     def _resize_pos_embed(self, posemb, posemb_shape, grid_size_height, grid_size_width, start_index=1):
         posemb_tok = posemb[:, :start_index]
         posemb_grid = posemb[0, start_index:]
 
-        old_grid_size = int(ops.sqrt(posemb_shape - start_index))
+        old_grid_size = int(mint.sqrt(posemb_shape - start_index))
 
         posemb_grid = posemb_grid.reshape(1, old_grid_size, old_grid_size, -1).permute(0, 3, 1, 2)
         posemb_grid = ops.interpolate(posemb_grid, size=(grid_size_height, grid_size_width), mode="bilinear")
         posemb_grid = posemb_grid.permute(0, 2, 3, 1).reshape(1, grid_size_height * grid_size_width, -1)
 
-        posemb = ops.cat([posemb_tok, posemb_grid], axis=1)
+        posemb = mint.cat([posemb_tok, posemb_grid], dim=1)
 
         return posemb
 
@@ -188,7 +188,7 @@ class DPTViTHybridEmbeddings(nn.Cell):
         embeddings = self.projection(features).flatten(start_dim=2).swapaxes(1, 2)
 
         cls_tokens = self.cls_token.broadcast_to((batch_size, -1, -1))
-        embeddings = ops.cat((cls_tokens, embeddings), axis=1)
+        embeddings = mint.cat((cls_tokens, embeddings), dim=1)
 
         # add positional encoding to each token
         embeddings = embeddings + position_embeddings
@@ -212,11 +212,11 @@ class DPTViTEmbeddings(nn.Cell):
     def __init__(self, config):
         super().__init__()
 
-        self.cls_token = ms.Parameter(ops.zeros((1, 1, config.hidden_size)))
+        self.cls_token = ms.Parameter(mint.zeros((1, 1, config.hidden_size)))
         self.patch_embeddings = DPTViTPatchEmbeddings(config)
         num_patches = self.patch_embeddings.num_patches
-        self.position_embeddings = ms.Parameter(ops.zeros((1, num_patches + 1, config.hidden_size)))
-        self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
+        self.position_embeddings = ms.Parameter(mint.zeros((1, num_patches + 1, config.hidden_size)))
+        self.dropout = mint.nn.Dropout(p=config.hidden_dropout_prob)
         self.config = config
         self.patch_size = self.config.patch_size
 
@@ -230,7 +230,7 @@ class DPTViTEmbeddings(nn.Cell):
         posemb_grid = ops.interpolate(posemb_grid, size=(grid_size_height, grid_size_width), mode="bilinear")
         posemb_grid = posemb_grid.permute(0, 2, 3, 1).reshape(1, grid_size_height * grid_size_width, -1)
 
-        posemb = ops.cat([posemb_tok, posemb_grid], axis=1)
+        posemb = mint.cat([posemb_tok, posemb_grid], dim=1)
 
         return posemb
 
@@ -249,7 +249,7 @@ class DPTViTEmbeddings(nn.Cell):
 
         # add the [CLS] token to the embedded patch tokens
         cls_tokens = self.cls_token.broadcast_to((batch_size, -1, -1))
-        embeddings = ops.cat((cls_tokens, embeddings), axis=1)
+        embeddings = mint.cat((cls_tokens, embeddings), dim=1)
 
         # add positional encoding to each token
         embeddings = embeddings + position_embeddings
@@ -281,8 +281,8 @@ class DPTViTPatchEmbeddings(nn.Cell):
         self.num_channels = num_channels
         self.num_patches = num_patches
 
-        self.projection = nn.Conv2d(
-            num_channels, hidden_size, kernel_size=patch_size, stride=patch_size, has_bias=True, pad_mode="valid"
+        self.projection = mint.nn.Conv2d(
+            num_channels, hidden_size, kernel_size=patch_size, stride=patch_size, bias=True
         )
 
     def construct(self, pixel_values):
@@ -310,11 +310,11 @@ class DPTViTSelfAttention(nn.Cell):
         self.attention_head_size_tensor = ms.Tensor(self.attention_head_size, ms.float32)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        self.query = nn.Dense(config.hidden_size, self.all_head_size, has_bias=config.qkv_bias)
-        self.key = nn.Dense(config.hidden_size, self.all_head_size, has_bias=config.qkv_bias)
-        self.value = nn.Dense(config.hidden_size, self.all_head_size, has_bias=config.qkv_bias)
+        self.query = mint.nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.key = mint.nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.value = mint.nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
 
-        self.dropout = nn.Dropout(p=config.attention_probs_dropout_prob)
+        self.dropout = mint.nn.Dropout(p=config.attention_probs_dropout_prob)
 
     def transpose_for_scores(self, x: ms.Tensor) -> ms.Tensor:
         new_x_shape = x.shape[:-1] + (self.num_attention_heads, self.attention_head_size)
@@ -331,12 +331,12 @@ class DPTViTSelfAttention(nn.Cell):
         query_layer = self.transpose_for_scores(mixed_query_layer)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = ops.matmul(query_layer, key_layer.swapaxes(-1, -2))
+        attention_scores = mint.matmul(query_layer, key_layer.swapaxes(-1, -2))
 
-        attention_scores = attention_scores / ops.sqrt(self.attention_head_size_tensor.to(attention_scores.dtype))
+        attention_scores = attention_scores / mint.sqrt(self.attention_head_size_tensor.to(attention_scores.dtype))
 
         # Normalize the attention scores to probabilities.
-        attention_probs = ops.softmax(attention_scores, axis=-1)
+        attention_probs = mint.nn.Softmax(dim=-1)(attention_scores)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
@@ -346,7 +346,7 @@ class DPTViTSelfAttention(nn.Cell):
         if head_mask is not None:
             attention_probs = attention_probs * head_mask
 
-        context_layer = ops.matmul(attention_probs, value_layer)
+        context_layer = mint.matmul(attention_probs, value_layer)
 
         context_layer = context_layer.permute(0, 2, 1, 3)
         new_context_layer_shape = context_layer.shape[:-2] + (self.all_head_size,)
@@ -366,8 +366,8 @@ class DPTViTSelfOutput(nn.Cell):
 
     def __init__(self, config: DPTConfig) -> None:
         super().__init__()
-        self.dense = nn.Dense(config.hidden_size, config.hidden_size)
-        self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
+        self.dense = mint.nn.Linear(config.hidden_size, config.hidden_size)
+        self.dropout = mint.nn.Dropout(p=config.hidden_dropout_prob)
 
     def construct(self, hidden_states: ms.Tensor, input_tensor: ms.Tensor) -> ms.Tensor:
         hidden_states = self.dense(hidden_states)
@@ -392,19 +392,19 @@ def find_pruneable_heads_and_indices(
         `Tuple[Set[int], torch.LongTensor]`: A tuple with the indices of heads to prune taking `already_pruned_heads`
         into account and the indices of rows/columns to keep in the layer weight.
     """
-    mask = ops.ones((n_heads, head_size))
+    mask = mint.ones((n_heads, head_size))
     heads = set(heads) - already_pruned_heads  # Convert to set and remove already pruned heads
     for head in heads:
         # Compute how many pruned heads are before the head and move the index accordingly
         head = head - sum(1 if h < head else 0 for h in already_pruned_heads)
         mask[head] = 0
     mask = mask.view(-1).eq(1)
-    index: ms.Tensor = ops.arange(len(mask))[mask].long()
+    index: ms.Tensor = mint.arange(len(mask))[mask].long()
     return heads, index
 
 
 # TODO: fix
-def prune_linear_layer(layer: nn.Dense, index: ms.Tensor, dim: int = 0) -> nn.Dense:
+def prune_linear_layer(layer: mint.nn.Linear, index: ms.Tensor, dim: int = 0) -> mint.nn.Linear:
     """
     Prune a linear layer to keep only entries in index.
 
@@ -426,7 +426,7 @@ def prune_linear_layer(layer: nn.Dense, index: ms.Tensor, dim: int = 0) -> nn.De
             b = layer.bias[index].clone().detach()
     new_size = list(layer.weight.shape)
     new_size[dim] = len(index)
-    new_layer = nn.Dense(new_size[1], new_size[0], bias=layer.bias is not None)
+    new_layer = mint.nn.Linear(new_size[1], new_size[0], bias=layer.bias is not None)
     new_layer.weight.requires_grad = False
     new_layer.weight.copy_(W)
     new_layer.weight.requires_grad = True
@@ -482,7 +482,7 @@ class DPTViTAttention(nn.Cell):
 class DPTViTIntermediate(nn.Cell):
     def __init__(self, config: DPTConfig) -> None:
         super().__init__()
-        self.dense = nn.Dense(config.hidden_size, config.intermediate_size)
+        self.dense = mint.nn.Linear(config.hidden_size, config.intermediate_size)
         if isinstance(config.hidden_act, str):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
         else:
@@ -499,8 +499,8 @@ class DPTViTIntermediate(nn.Cell):
 class DPTViTOutput(nn.Cell):
     def __init__(self, config: DPTConfig) -> None:
         super().__init__()
-        self.dense = nn.Dense(config.intermediate_size, config.hidden_size)
-        self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
+        self.dense = mint.nn.Linear(config.intermediate_size, config.hidden_size)
+        self.dropout = mint.nn.Dropout(p=config.hidden_dropout_prob)
 
     def construct(self, hidden_states: ms.Tensor, input_tensor: ms.Tensor) -> ms.Tensor:
         hidden_states = self.dense(hidden_states)
@@ -523,8 +523,8 @@ class DPTViTLayer(nn.Cell):
         self.attention = DPTViTAttention(config)
         self.intermediate = DPTViTIntermediate(config)
         self.output = DPTViTOutput(config)
-        self.layernorm_before = nn.LayerNorm((config.hidden_size,), epsilon=config.layer_norm_eps)
-        self.layernorm_after = nn.LayerNorm((config.hidden_size,), epsilon=config.layer_norm_eps)
+        self.layernorm_before = mint.nn.LayerNorm((config.hidden_size,), eps=config.layer_norm_eps)
+        self.layernorm_after = mint.nn.LayerNorm((config.hidden_size,), eps=config.layer_norm_eps)
 
     def construct(
         self,
@@ -638,13 +638,13 @@ class DPTReassembleStage(nn.Cell):
 
     def _init_reassemble_dpt_hybrid(self, config):
         r""" "
-        For DPT-Hybrid the first 2 reassemble layers are set to `nn.Identity()`, please check the official
+        For DPT-Hybrid the first 2 reassemble layers are set to `mint.nn.Identity()`, please check the official
         implementation: https://github.com/isl-org/DPT/blob/f43ef9e08d70a752195028a51be5e1aff227b913/dpt/vit.py#L438
         for more details.
         """
         for i, factor in zip(range(len(config.neck_hidden_sizes)), config.reassemble_factors):
             if i <= 1:
-                self.layers.append(nn.Identity())
+                self.layers.append(mint.nn.Identity())
             elif i > 1:
                 self.layers.append(DPTReassembleLayer(config, channels=config.neck_hidden_sizes[i], factor=factor))
 
@@ -656,10 +656,10 @@ class DPTReassembleStage(nn.Cell):
         hidden_size = _get_backbone_hidden_size(config)
         for i in range(len(config.neck_hidden_sizes)):
             if i <= 1:
-                self.readout_projects.append(nn.SequentialCell(nn.Identity()))
+                self.readout_projects.append(nn.SequentialCell(mint.nn.Identity()))
             elif i > 1:
                 self.readout_projects.append(
-                    nn.SequentialCell(nn.Dense(2 * hidden_size, hidden_size), ACT2FN[config.hidden_act])
+                    nn.SequentialCell(mint.nn.Linear(2 * hidden_size, hidden_size), ACT2FN[config.hidden_act])
                 )
 
     def _init_reassemble_dpt(self, config):
@@ -671,7 +671,7 @@ class DPTReassembleStage(nn.Cell):
             hidden_size = _get_backbone_hidden_size(config)
             for _ in range(len(config.neck_hidden_sizes)):
                 self.readout_projects.append(
-                    nn.SequentialCell(nn.Dense(2 * hidden_size, hidden_size), ACT2FN[config.hidden_act])
+                    nn.SequentialCell(mint.nn.Linear(2 * hidden_size, hidden_size), ACT2FN[config.hidden_act])
                 )
 
     def construct(self, hidden_states: List[ms.Tensor], patch_height=None, patch_width=None) -> List[ms.Tensor]:
@@ -700,7 +700,7 @@ class DPTReassembleStage(nn.Cell):
                     hidden_state = hidden_state.flatten(start_dim=2).permute((0, 2, 1))
                     readout = cls_token.unsqueeze(1).expand_as(hidden_state)
                     # concatenate the readout token to the hidden states and project
-                    hidden_state = self.readout_projects[i](ops.cat((hidden_state, readout), -1))
+                    hidden_state = self.readout_projects[i](mint.cat((hidden_state, readout), -1))
                     # reshape back to (batch_size, num_channels, height, width)
                     hidden_state = hidden_state.permute(0, 2, 1).reshape(feature_shape)
                 elif self.readout_type == "add":
@@ -724,21 +724,22 @@ class DPTReassembleLayer(nn.Cell):
         super().__init__()
         # projection
         hidden_size = _get_backbone_hidden_size(config)
-        self.projection = nn.Conv2d(
-            in_channels=hidden_size, out_channels=channels, kernel_size=1, has_bias=True, pad_mode="valid"
+        self.projection = mint.nn.Conv2d(
+            in_channels=hidden_size, out_channels=channels, kernel_size=1, bias=True
         )
 
         # up/down sampling depending on factor
         if factor > 1:
+            # TODO: nn.Conv2dTranspose 已支持，已收录
             self.resize = nn.Conv2dTranspose(
                 channels, channels, kernel_size=factor, stride=factor, pad_mode="pad", padding=0, has_bias=True
             )
         elif factor == 1:
-            self.resize = nn.Identity()
+            self.resize = mint.nn.Identity()
         elif factor < 1:
             # so should downsample
-            self.resize = nn.Conv2d(
-                channels, channels, kernel_size=3, stride=int(1 / factor), padding=1, pad_mode="pad", has_bias=True
+            self.resize = mint.nn.Conv2d(
+                channels, channels, kernel_size=3, stride=int(1 / factor), padding=1, bias=True
             )
 
     def construct(self, hidden_state):
@@ -789,31 +790,29 @@ class DPTPreActResidualLayer(nn.Cell):
             else not self.use_batch_norm
         )
 
-        self.activation1 = nn.ReLU()
-        self.convolution1 = nn.Conv2d(
+        self.activation1 = mint.nn.ReLU()
+        self.convolution1 = mint.nn.Conv2d(
             config.fusion_hidden_size,
             config.fusion_hidden_size,
             kernel_size=3,
             stride=1,
             padding=1,
-            has_bias=use_bias_in_fusion_residual,
-            pad_mode="pad",
+            bias=use_bias_in_fusion_residual
         )
 
-        self.activation2 = nn.ReLU()
-        self.convolution2 = nn.Conv2d(
+        self.activation2 = mint.nn.ReLU()
+        self.convolution2 = mint.nn.Conv2d(
             config.fusion_hidden_size,
             config.fusion_hidden_size,
             kernel_size=3,
             stride=1,
             padding=1,
-            has_bias=use_bias_in_fusion_residual,
-            pad_mode="pad",
+            bias=use_bias_in_fusion_residual
         )
 
         if self.use_batch_norm:
-            self.batch_norm1 = nn.BatchNorm2d(config.fusion_hidden_size)
-            self.batch_norm2 = nn.BatchNorm2d(config.fusion_hidden_size)
+            self.batch_norm1 = mint.nn.BatchNorm2d(config.fusion_hidden_size)
+            self.batch_norm2 = mint.nn.BatchNorm2d(config.fusion_hidden_size)
 
     def construct(self, hidden_state: ms.Tensor) -> ms.Tensor:
         residual = hidden_state
@@ -848,8 +847,8 @@ class DPTFeatureFusionLayer(nn.Cell):
 
         self.align_corners = align_corners
 
-        self.projection = nn.Conv2d(
-            config.fusion_hidden_size, config.fusion_hidden_size, kernel_size=1, has_bias=True, pad_mode="valid"
+        self.projection = mint.nn.Conv2d(
+            config.fusion_hidden_size, config.fusion_hidden_size, kernel_size=1, bias=True
         )
 
         self.residual_layer1 = DPTPreActResidualLayer(config)
@@ -909,7 +908,7 @@ class DPTModel(DPTPreTrainedModel):
             self.embeddings = DPTViTEmbeddings(config)
         self.encoder = DPTViTEncoder(config)
 
-        self.layernorm = nn.LayerNorm((config.hidden_size,), epsilon=config.layer_norm_eps)
+        self.layernorm = mint.nn.LayerNorm((config.hidden_size,), eps=config.layer_norm_eps)
         self.pooler = DPTViTPooler(config) if add_pooling_layer else None
 
         # Initialize weights and apply final processing
@@ -981,8 +980,8 @@ class DPTModel(DPTPreTrainedModel):
 class DPTViTPooler(nn.Cell):
     def __init__(self, config: DPTConfig):
         super().__init__()
-        self.dense = nn.Dense(config.hidden_size, config.hidden_size)
-        # TODO: nn.Tanh()?
+        self.dense = mint.nn.Linear(config.hidden_size, config.hidden_size)
+        # TODO: nn.Tanh()? 未收录，不支持
         self.activation = nn.Tanh()
 
     def construct(self, hidden_states):
@@ -1020,7 +1019,7 @@ class DPTNeck(nn.Cell):
         self.convs = nn.CellList()
         for channel in config.neck_hidden_sizes:
             self.convs.append(
-                nn.Conv2d(channel, config.fusion_hidden_size, kernel_size=3, padding=1, has_bias=False, pad_mode="pad")
+                mint.nn.Conv2d(channel, config.fusion_hidden_size, kernel_size=3, padding=1, bias=False)
             )
 
         # fusion
@@ -1065,18 +1064,19 @@ class DPTDepthEstimationHead(nn.Cell):
 
         self.projection = None
         if config.add_projection:
-            self.projection = nn.Conv2d(
-                256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), pad_mode="pad", has_bias=True
+            self.projection = mint.nn.Conv2d(
+                256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=True
             )
 
         features = config.fusion_hidden_size
+        # TODO: nn.Upsample 已收录，不支持
         self.head = nn.SequentialCell(
-            nn.Conv2d(features, features // 2, kernel_size=3, stride=1, padding=1, pad_mode="pad", has_bias=True),
+            mint.nn.Conv2d(features, features // 2, kernel_size=3, stride=1, padding=1, bias=True),
             nn.Upsample(scale_factor=2.0, mode="bilinear", align_corners=True, recompute_scale_factor=True),
-            nn.Conv2d(features // 2, 32, kernel_size=3, stride=1, padding=1, pad_mode="pad", has_bias=True),
-            nn.ReLU(),
-            nn.Conv2d(32, 1, kernel_size=1, stride=1, padding=0, has_bias=True),
-            nn.ReLU(),
+            mint.nn.Conv2d(features // 2, 32, kernel_size=3, stride=1, padding=1, bias=True),
+            mint.nn.ReLU(),
+            mint.nn.Conv2d(32, 1, kernel_size=1, stride=1, padding=0, bias=True),
+            mint.nn.ReLU(),
         )
 
     def construct(self, hidden_states: List[ms.Tensor]) -> ms.Tensor:
@@ -1085,7 +1085,7 @@ class DPTDepthEstimationHead(nn.Cell):
 
         if self.projection is not None:
             hidden_states = self.projection(hidden_states)
-            hidden_states = nn.ReLU()(hidden_states)
+            hidden_states = mint.nn.ReLU()(hidden_states)
 
         predicted_depth = self.head(hidden_states)
 

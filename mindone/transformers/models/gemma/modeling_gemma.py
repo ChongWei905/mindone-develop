@@ -27,7 +27,7 @@ from transformers.models.gemma.configuration_gemma import GemmaConfig
 from transformers.utils import logging
 
 import mindspore as ms
-from mindspore import nn, ops
+from mindspore import nn, ops, mint
 from mindspore.common.initializer import Normal, Zero, initializer
 from mindspore.ops.operations.nn_ops import FlashAttentionScore as FlashAttention
 
@@ -79,10 +79,12 @@ def _prepare_4d_causal_attention_mask_with_cache_position(
         # In this case we assume that the mask comes already in inverted form and requires no inversion or slicing.
         causal_mask = attention_mask
     else:
+        # TODO: ops.full 已收录，已支持
         causal_mask = ops.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype)
         if sequence_length != 1:
+            # TODO： ops.triu 未收录，不支持
             causal_mask = ops.triu(causal_mask, diagonal=1)
-        causal_mask *= ops.arange(target_length) > cache_position.reshape(-1, 1)
+        causal_mask *= mint.arange(target_length) > cache_position.reshape(-1, 1)
         causal_mask = causal_mask[None, None, :, :].broadcast_to((batch_size, 1, -1, -1))
         if attention_mask is not None:
             causal_mask = causal_mask.copy()  # copy to contiguous memory for in-place edit
@@ -98,9 +100,10 @@ class GemmaRMSNorm(nn.Cell):
     def __init__(self, dim: int, eps: float = 1e-6):
         super().__init__()
         self.eps = eps
-        self.weight = ms.Parameter(ops.zeros(dim))
+        self.weight = ms.Parameter(mint.zeros(dim))
 
     def _norm(self, x):
+        # TODO: ops.rsqrt 未收录，不支持
         return x * ops.rsqrt(x.pow(2).mean(-1, keep_dims=True) + self.eps)
 
     def construct(self, x):
@@ -124,7 +127,7 @@ class GemmaRotaryEmbedding(nn.Cell):
         self.dim = dim
         self.max_position_embeddings = max_position_embeddings
         self.base = base
-        inv_freq = 1.0 / (self.base ** (ops.arange(0, self.dim, 2, dtype=ms.int32).float() / self.dim))
+        inv_freq = 1.0 / (self.base ** (mint.arange(0, self.dim, 2, dtype=ms.int32).float() / self.dim))
         self.inv_freq = inv_freq
 
     def construct(self, x, position_ids, seq_len=None):
@@ -133,8 +136,8 @@ class GemmaRotaryEmbedding(nn.Cell):
         position_ids_expanded = position_ids[:, None, :].float()
         # Force float32 since bfloat16 loses precision on long contexts
         # See https://github.com/huggingface/transformers/pull/29285
-        freqs = ops.matmul(inv_freq_expanded.float(), position_ids_expanded.float()).swapaxes(1, 2)
-        emb = ops.cat((freqs, freqs), axis=-1)
+        freqs = mint.matmul(inv_freq_expanded.float(), position_ids_expanded.float()).swapaxes(1, 2)
+        emb = mint.cat((freqs, freqs), axis=-1)
         cos = emb.cos()
         sin = emb.sin()
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
@@ -146,9 +149,9 @@ class GemmaMLP(nn.Cell):
         self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Dense(self.hidden_size, self.intermediate_size, has_bias=False)
-        self.up_proj = nn.Dense(self.hidden_size, self.intermediate_size, has_bias=False)
-        self.down_proj = nn.Dense(self.intermediate_size, self.hidden_size, has_bias=False)
+        self.gate_proj = mint.nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = mint.nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = mint.nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         if config.hidden_activation is None:
             logger.warning_once(
                 "`config.hidden_act` is ignored, you should use `config.hidden_activation` instead.\n"
@@ -179,12 +182,12 @@ class GemmaDynamicNTKScalingRotaryEmbedding(GemmaRotaryEmbedding):
 
     def construct(self, x, position_ids):
         # difference to the original RoPE: inv_freq is recomputed when the sequence length > original length
-        seq_len = ops.max(position_ids) + 1
+        seq_len = mint.max(position_ids) + 1
         if seq_len > self.max_position_embeddings:
             base = self.base * (
                 (self.scaling_factor * seq_len / self.max_position_embeddings) - (self.scaling_factor - 1)
             ) ** (self.dim / (self.dim - 2))
-            inv_freq = 1.0 / (base ** (ops.arange(0, self.dim, 2, dtype=ms.int32).float() / self.dim))
+            inv_freq = 1.0 / (base ** (mint.arange(0, self.dim, 2, dtype=ms.int32).float() / self.dim))
             # self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: this may break with compilation
             self.inv_freq = inv_freq
 
@@ -195,8 +198,8 @@ class GemmaDynamicNTKScalingRotaryEmbedding(GemmaRotaryEmbedding):
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return ops.cat((-x2, x1), axis=-1)
+    x2 = x[..., x.shape[-1] // 2:]
+    return mint.cat((-x2, x1), dim=-1)
 
 
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
@@ -269,14 +272,14 @@ class GemmaAttention(nn.Cell):
                 f" and `num_heads`: {self.num_heads})."
             )
 
-        self.q_proj = nn.Dense(self.hidden_size, self.num_heads * self.head_dim, has_bias=config.attention_bias)
-        self.k_proj = nn.Dense(
-            self.hidden_size, self.num_key_value_heads * self.head_dim, has_bias=config.attention_bias
+        self.q_proj = mint.nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
+        self.k_proj = mint.nn.Linear(
+            self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias
         )
-        self.v_proj = nn.Dense(
-            self.hidden_size, self.num_key_value_heads * self.head_dim, has_bias=config.attention_bias
+        self.v_proj = mint.nn.Linear(
+            self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias
         )
-        self.o_proj = nn.Dense(self.num_heads * self.head_dim, self.hidden_size, has_bias=config.attention_bias)
+        self.o_proj = mint.nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
         self.rotary_emb = GemmaRotaryEmbedding(
             self.head_dim,
             max_position_embeddings=self.max_position_embeddings,
@@ -316,9 +319,11 @@ class GemmaAttention(nn.Cell):
             attn_weights = attn_weights + causal_mask
 
         # upcast attention to fp32
-        attn_weights = ops.softmax(attn_weights, axis=-1, dtype=ms.float32).to(query_states.dtype)
-        attn_weights = ops.dropout(attn_weights, p=self.attention_dropout, training=self.training)
-        attn_output = ops.matmul(attn_weights, value_states)
+        attn_weights = mint.nn.Softmax(dim=-1)(attn_weights, dtype=ms.float32).to(query_states.dtype)
+        # TODO: Dropout need review
+        if self.training:
+            attn_weights = mint.nn.Dropout(p=self.attention_dropout)(attn_weights)
+        attn_output = mint.matmul(attn_weights, value_states)
 
         if attn_output.shape != (bsz, self.num_heads, q_len, self.head_dim):
             raise ValueError(
@@ -598,10 +603,11 @@ class GemmaPreTrainedModel(MSPreTrainedModel):
 
     def _init_weights(self, module):
         std = self.config.initializer_range
-        if isinstance(module, nn.Dense):
+        if isinstance(module, mint.nn.Linear):
             module.weight.set_data(initializer(Normal(mean=0.0, sigma=std), module.weight.shape, module.weight.dtype))
             if module.bias is not None:
                 module.bias.set_data(initializer(Zero(), module.bias.shape, module.bias.dtype))
+        # TODO: mint.nn.Embedding init
         elif isinstance(module, nn.Embedding):
             module.embedding_table.set_data(
                 initializer(Normal(mean=0.0, sigma=std), module.embedding_table.shape, module.embedding_table.dtype)
@@ -626,7 +632,7 @@ class GemmaModel(GemmaPreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=self.padding_idx)
+        self.embed_tokens = mint.nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=self.padding_idx)
         self.layers = nn.CellList(
             [GemmaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
@@ -695,7 +701,7 @@ class GemmaModel(GemmaPreTrainedModel):
 
         if cache_position is None:
             past_seen_tokens = 0
-            cache_position = ops.arange(
+            cache_position = mint.arange(
                 past_seen_tokens,
                 past_seen_tokens + inputs_embeds.shape[1],
             )
@@ -826,7 +832,7 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
         super().__init__(config)
         self.model = GemmaModel(config)
         self.vocab_size = config.vocab_size
-        self.lm_head = nn.Dense(config.hidden_size, config.vocab_size, has_bias=False)
+        self.lm_head = mint.nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -991,7 +997,7 @@ class GemmaForSequenceClassification(GemmaPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = GemmaModel(config)
-        self.score = nn.Dense(config.hidden_size, self.num_labels, has_bias=False)
+        self.score = mint.nn.Linear(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1049,12 +1055,12 @@ class GemmaForSequenceClassification(GemmaPreTrainedModel):
         else:
             if input_ids is not None:
                 # if no pad token found, use modulo instead of reverse indexing for ONNX compatibility
-                sequence_lengths = ops.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1
+                sequence_lengths = mint.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1
                 sequence_lengths = sequence_lengths % input_ids.shape[-1]
             else:
                 sequence_lengths = -1
 
-        pooled_logits = logits[ops.arange(batch_size), sequence_lengths]
+        pooled_logits = logits[mint.arange(batch_size), sequence_lengths]
 
         loss = None
         if labels is not None:
@@ -1067,16 +1073,16 @@ class GemmaForSequenceClassification(GemmaPreTrainedModel):
                     self.config.problem_type = "multi_label_classification"
 
             if self.config.problem_type == "regression":
-                loss_fct = nn.MSELoss()
+                loss_fct = mint.nn.MSELoss()
                 if self.num_labels == 1:
                     loss = loss_fct(pooled_logits.squeeze(), labels.squeeze())
                 else:
                     loss = loss_fct(pooled_logits, labels)
             elif self.config.problem_type == "single_label_classification":
-                loss_fct = nn.CrossEntropyLoss()
+                loss_fct = mint.nn.CrossEntropyLoss()
                 loss = loss_fct(pooled_logits.view(-1, self.num_labels), labels.view(-1))
             elif self.config.problem_type == "multi_label_classification":
-                loss_fct = nn.BCEWithLogitsLoss()
+                loss_fct = mint.nn.BCEWithLogitsLoss()
                 loss = loss_fct(pooled_logits, labels)
         if not return_dict:
             output = (pooled_logits,) + transformer_outputs[1:]
@@ -1102,8 +1108,8 @@ class GemmaForTokenClassification(GemmaPreTrainedModel):
             classifier_dropout = config.hidden_dropout
         else:
             classifier_dropout = 0.1
-        self.dropout = nn.Dropout(classifier_dropout)
-        self.score = nn.Dense(config.hidden_size, config.num_labels)
+        self.dropout = mint.nn.Dropout(classifier_dropout)
+        self.score = mint.nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1152,7 +1158,7 @@ class GemmaForTokenClassification(GemmaPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss_fct = nn.CrossEntropyLoss()
+            loss_fct = mint.nn.CrossEntropyLoss()
             loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
         if not return_dict:
@@ -1175,16 +1181,15 @@ def scaled_dot_product_attention(query, key, value, attn_mask=None, dtype=None):
 
     if attn_mask is not None:
         attn_mask = attn_mask.masked_fill(not attn_mask, -1e5) if attn_mask.dtype == ms.bool_ else attn_mask
-        attn_weight = ops.softmax(
-            ops.cast(ops.matmul(query, key.swapaxes(-2, -1)) / (query.shape[-1] ** 0.5) + attn_mask, ms.float32),
-            axis=-1,
+        attn_weight = mint.nn.Softmax(dim=-1)(
+            ops.cast(ops.matmul(query, key.swapaxes(-2, -1)) / (query.shape[-1] ** 0.5) + attn_mask, ms.float32)
         ).astype(_dtype)
     else:
-        attn_weight = ops.softmax(
-            ops.cast(ops.matmul(query, key.swapaxes(-2, -1)) / (query.shape[-1] ** 0.5), ms.float32), axis=-1
+        attn_weight = mint.nn.Softmax(dim=-1)(
+            ops.cast(ops.matmul(query, key.swapaxes(-2, -1)) / (query.shape[-1] ** 0.5), ms.float32)
         ).astype(_dtype)
 
-    out = ops.matmul(attn_weight, value)
+    out = mint.matmul(attn_weight, value)
     out = out.astype(_dtype)
 
     return out

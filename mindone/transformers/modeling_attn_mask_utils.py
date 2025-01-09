@@ -17,7 +17,7 @@ from typing import List, Optional, Tuple, Union
 import numpy as np
 
 import mindspore as ms
-from mindspore import ops
+from mindspore import ops, mint
 
 _MIN_FP16 = ms.tensor(np.finfo(np.float16).min, dtype=ms.float16)
 _MIN_FP32 = ms.tensor(np.finfo(np.float32).min, dtype=ms.float32)
@@ -217,19 +217,19 @@ def _make_causal_mask(
     """
     bsz, tgt_len = input_ids_shape
     mask = ops.full((tgt_len, tgt_len), dtype_to_min(dtype), dtype=dtype)
-    mask_cond = ops.arange(mask.shape[-1])
+    mask_cond = mint.arange(mask.shape[-1])
     mask = mask.masked_fill(mask_cond < (mask_cond + 1).view(mask.shape[-1], 1), ms.tensor(0).to(dtype))
 
     mask = mask.to(dtype)
 
     if past_key_values_length > 0:
-        mask = ops.cat([ops.zeros((tgt_len, past_key_values_length), dtype=dtype), mask], axis=-1)
+        mask = mint.cat([ops.zeros((tgt_len, past_key_values_length), dtype=dtype), mask], axis=-1)
 
     # add lower triangular sliding window mask if necessary
     if sliding_window is not None:
         diagonal = past_key_values_length - sliding_window + 1
 
-        context_mask = 1 - ops.triu(ops.ones_like(mask, dtype=ms.int32), diagonal=diagonal)
+        context_mask = 1 - ops.triu(mint.ones_like(mask, dtype=ms.int32), diagonal=diagonal)
         mask = mask.masked_fill(context_mask.bool(), dtype_to_min(dtype))
 
     return mask[None, None, :, :].tile((bsz, 1, 1, 1))

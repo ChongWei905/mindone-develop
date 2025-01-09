@@ -23,7 +23,7 @@ from transformers.models.bit.configuration_bit import BitConfig
 from transformers.utils import logging
 
 import mindspore as ms
-from mindspore import nn, ops
+from mindspore import nn, ops, mint
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BackboneOutput, BaseModelOutputWithNoAttention, BaseModelOutputWithPoolingAndNoAttention
@@ -123,15 +123,14 @@ class WeightStandardizedConv2d(nn.Conv2d):
         else:
             self.pad = None
         self.eps = eps
-        self.mean_op = ops.ReduceMean(keep_dims=True)
 
     def construct(self, hidden_state):
         if self.pad is not None:
             hidden_state = self.pad(hidden_state)
         weight = self.weight
-        m = self.mean_op(weight, [1, 2, 3])
+        m = mint.mean(weight, [1, 2, 3], keepdim=True)
         v = weight.var((1, 2, 3), keepdims=True)
-        weight = (weight - m) / ops.sqrt(v + self.eps)
+        weight = (weight - m) / mint.sqrt(v + self.eps)
         hidden_state = self.conv2d(hidden_state, weight)
         if self.has_bias:
             hidden_state = self.bias_add(hidden_state, self.bias)
@@ -148,7 +147,7 @@ class BitGroupNormActivation(nn.GroupNorm):
         if apply_activation:
             self.activation = ACT2FN[config.hidden_act]
         else:
-            self.activation = nn.Identity()
+            self.activation = mint.nn.Identity()
 
     def construct(self, hidden_state):
         hidden_state = self._cal_output(hidden_state)
@@ -226,8 +225,8 @@ class BitMaxPool2d(nn.Cell):
         if use_dynamic_padding:
             self.pad = DynamicPad2d(kernel_size, stride, dilation, padding_value)
         else:
-            self.pad = nn.Identity()
-
+            self.pad = mint.nn.Identity()
+        # TODO: MaxPool 未收录，不支持
         self.max_pool2d = ops.operations.MaxPool(kernel_size, stride, "valid")
 
     def construct(self, hidden_states):
@@ -256,14 +255,15 @@ class BitEmbeddings(nn.Cell):
 
         # Use the same padding strategy as convolutional layers
         if config.global_padding is not None and config.global_padding.upper() == "SAME":
-            self.pad = nn.Identity()
+            self.pad = mint.nn.Identity()
         else:
+            # TODO: ConstantPad2d 已收录，已支持
             self.pad = nn.ConstantPad2d(padding=(1, 1, 1, 1), value=0.0)
 
         if not config.layer_type == "preactivation":
             self.norm = BitGroupNormActivation(config, num_channels=config.embedding_size)
         else:
-            self.norm = nn.Identity()
+            self.norm = mint.nn.Identity()
 
         self.num_channels = config.num_channels
 
@@ -300,7 +300,7 @@ def drop_path(input: ms.Tensor, drop_prob: float = 0.0, training: bool = False) 
         return input
     keep_prob = 1 - drop_prob
     shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + ops.rand(shape, dtype=input.dtype, device=input.device)
+    random_tensor = keep_prob + mint.rand(shape, dtype=input.dtype, device=input.device)
     random_tensor.floor_()  # binarize
     output = input.div(keep_prob) * random_tensor
     return output
@@ -379,7 +379,7 @@ class BitPreActivationBottleneckLayer(nn.Cell):
         self.norm3 = BitGroupNormActivation(config, mid_channels)
         self.conv3 = WeightStandardizedConv2d(mid_channels, out_channels, 1, eps=1e-8, padding=config.global_padding)
 
-        self.drop_path = BitDropPath(drop_path_rate) if drop_path_rate > 0 else nn.Identity()
+        self.drop_path = BitDropPath(drop_path_rate) if drop_path_rate > 0 else mint.nn.Identity()
 
     def construct(self, hidden_states):
         hidden_states_preact = self.norm1(hidden_states)
@@ -445,7 +445,7 @@ class BitBottleneckLayer(nn.Cell):
         self.norm2 = BitGroupNormActivation(config, num_channels=mid_chs)
         self.conv3 = WeightStandardizedConv2d(mid_chs, out_channels, 1, eps=1e-8, padding=config.global_padding)
         self.norm3 = BitGroupNormActivation(config, num_channels=out_channels, apply_activation=False)
-        self.drop_path = BitDropPath(drop_path_rate) if drop_path_rate > 0 else nn.Identity()
+        self.drop_path = BitDropPath(drop_path_rate) if drop_path_rate > 0 else mint.nn.Identity()
 
         self.activation = ACT2FN[config.hidden_act]
 
@@ -484,7 +484,7 @@ class BitDownsampleConv(nn.Cell):
             in_channels, out_channels, 1, stride=stride, eps=1e-8, padding=config.global_padding
         )
         self.norm = (
-            nn.Identity()
+            mint.nn.Identity()
             if preact
             else BitGroupNormActivation(config, num_channels=out_channels, apply_activation=False)
         )
@@ -663,10 +663,10 @@ class BitModel(BitPreTrainedModel):
         self.norm = (
             BitGroupNormActivation(config, num_channels=config.hidden_sizes[-1])
             if config.layer_type == "preactivation"
-            else nn.Identity()
+            else mint.nn.Identity()
         )
 
-        self.pooler = nn.AdaptiveAvgPool2d((1, 1))
+        self.pooler = mint.nn.AdaptiveAvgPool2d((1, 1))
         # Initialize weights and apply final processing
         self.post_init()
 

@@ -20,7 +20,7 @@ from transformers.models.clip.configuration_clip import CLIPConfig, CLIPTextConf
 from transformers.utils import ModelOutput, logging
 
 import mindspore as ms
-from mindspore import nn, ops
+from mindspore import nn, ops, mint
 
 from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _create_4d_causal_attention_mask, _prepare_4d_attention_mask
@@ -46,7 +46,7 @@ CLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
 # contrastive loss function, adapted from
 # https://sachinruk.github.io/blog/2021-03-07-clip.html
 def contrastive_loss(logits: ms.Tensor) -> ms.Tensor:
-    return ops.cross_entropy(logits, ops.arange(len(logits)))
+    return ops.cross_entropy(logits, mint.arange(len(logits)))
 
 
 def clip_loss(similarity: ms.Tensor) -> ms.Tensor:
@@ -158,20 +158,20 @@ class CLIPVisionEmbeddings(nn.Cell):
         self.image_size = config.image_size
         self.patch_size = config.patch_size
 
-        self.class_embedding = ms.Parameter(ops.randn(self.embed_dim), name="class_embedding")
+        self.class_embedding = ms.Parameter(mint.randn(self.embed_dim), name="class_embedding")
 
-        self.patch_embedding = nn.Conv2d(
+        self.patch_embedding = mint.nn.Conv2d(
             in_channels=config.num_channels,
             out_channels=self.embed_dim,
             kernel_size=self.patch_size,
             stride=self.patch_size,
-            has_bias=False,
+            bias=False,
         )
 
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches + 1
-        self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
-        self.position_ids = ops.arange(self.num_positions).unsqueeze(0)
+        self.position_embedding = mint.nn.Embedding(self.num_positions, self.embed_dim)
+        self.position_ids = mint.arange(self.num_positions).unsqueeze(0)
 
     def construct(self, pixel_values: ms.Tensor) -> ms.Tensor:
         batch_size = pixel_values.shape[0]
@@ -180,7 +180,7 @@ class CLIPVisionEmbeddings(nn.Cell):
         patch_embeds = patch_embeds.flatten(start_dim=2).swapaxes(1, 2)
 
         class_embeds = self.class_embedding.reshape((1, 1, -1)).tile((batch_size, 1, 1))
-        embeddings = ops.cat([class_embeds, patch_embeds], axis=1)
+        embeddings = mint.cat([class_embeds, patch_embeds], dim=1)
         embeddings = embeddings + self.position_embedding(self.position_ids)
         return embeddings
 
@@ -190,11 +190,11 @@ class CLIPTextEmbeddings(nn.Cell):
         super().__init__()
         embed_dim = config.hidden_size
 
-        self.token_embedding = nn.Embedding(config.vocab_size, embed_dim)
-        self.position_embedding = nn.Embedding(config.max_position_embeddings, embed_dim)
+        self.token_embedding = mint.nn.Embedding(config.vocab_size, embed_dim)
+        self.position_embedding = mint.nn.Embedding(config.max_position_embeddings, embed_dim)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.position_ids = ops.arange(config.max_position_embeddings).unsqueeze(0)
+        self.position_ids = mint.arange(config.max_position_embeddings).unsqueeze(0)
 
     def construct(
         self,
@@ -233,10 +233,10 @@ class CLIPAttention(nn.Cell):
         self.scale = self.head_dim**-0.5
         self.dropout = config.attention_dropout
 
-        self.k_proj = nn.Dense(self.embed_dim, self.embed_dim)
-        self.v_proj = nn.Dense(self.embed_dim, self.embed_dim)
-        self.q_proj = nn.Dense(self.embed_dim, self.embed_dim)
-        self.out_proj = nn.Dense(self.embed_dim, self.embed_dim)
+        self.k_proj = mint.nn.Linear(self.embed_dim, self.embed_dim)
+        self.v_proj = mint.nn.Linear(self.embed_dim, self.embed_dim)
+        self.q_proj = mint.nn.Linear(self.embed_dim, self.embed_dim)
+        self.out_proj = mint.nn.Linear(self.embed_dim, self.embed_dim)
 
     def _shape(self, tensor: ms.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).swapaxes(1, 2)
@@ -289,7 +289,7 @@ class CLIPAttention(nn.Cell):
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
-        attn_weights = ops.softmax(attn_weights, axis=-1)
+        attn_weights = mint.nn.Softmax(dim=-1)(attn_weights)
 
         if output_attentions:
             # this operation is a bit akward, but it's required to
@@ -301,7 +301,10 @@ class CLIPAttention(nn.Cell):
         else:
             attn_weights_reshaped = None
 
-        attn_probs = ops.dropout(attn_weights, p=self.dropout, training=self.training)
+        if self.training:
+            attn_probs = mint.nn.Dropout(p=self.dropout)(attn_weights)
+        else:
+            attn_probs = attn_weights
 
         attn_output = ops.bmm(attn_probs, value_states)
 
@@ -325,8 +328,8 @@ class CLIPMLP(nn.Cell):
         super().__init__()
         self.config = config
         self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Dense(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Dense(config.intermediate_size, config.hidden_size)
+        self.fc1 = mint.nn.Linear(config.hidden_size, config.intermediate_size)
+        self.fc2 = mint.nn.Linear(config.intermediate_size, config.hidden_size)
 
     def construct(self, hidden_states: ms.Tensor) -> ms.Tensor:
         hidden_states = self.fc1(hidden_states)
@@ -340,9 +343,9 @@ class CLIPEncoderLayer(nn.Cell):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.self_attn = CLIPAttention(config)
-        self.layer_norm1 = nn.LayerNorm((self.embed_dim,), epsilon=config.layer_norm_eps)
+        self.layer_norm1 = mint.nn.LayerNorm((self.embed_dim,), eps=config.layer_norm_eps)
         self.mlp = CLIPMLP(config)
-        self.layer_norm2 = nn.LayerNorm((self.embed_dim,), epsilon=config.layer_norm_eps)
+        self.layer_norm2 = mint.nn.LayerNorm((self.embed_dim,), eps=config.layer_norm_eps)
 
     def construct(
         self,
@@ -497,7 +500,7 @@ class CLIPTextTransformer(nn.Cell):
         embed_dim = config.hidden_size
         self.embeddings = CLIPTextEmbeddings(config)
         self.encoder = CLIPEncoder(config)
-        self.final_layer_norm = nn.LayerNorm((embed_dim,), epsilon=config.layer_norm_eps)
+        self.final_layer_norm = mint.nn.LayerNorm((embed_dim,), eps=config.layer_norm_eps)
 
         # For `pooled_output` computation
         self.eos_token_id = config.eos_token_id
@@ -554,13 +557,13 @@ class CLIPTextTransformer(nn.Cell):
             # take features from the eot embedding (eot_token is the highest number in each sequence)
             # casting to torch.int for onnx compatibility: argmax doesn't support int64 inputs with opset 14
             pooled_output = last_hidden_state[
-                ops.arange(last_hidden_state.shape[0]),
+                mint.arange(last_hidden_state.shape[0]),
                 input_ids.to(dtype=ms.int32).argmax(axis=-1),
             ]
         else:
             # The config gets updated `eos_token_id` from PR #24773 (so the use of exta new tokens is possible)
             pooled_output = last_hidden_state[
-                ops.arange(last_hidden_state.shape[0]),
+                mint.arange(last_hidden_state.shape[0]),
                 # We need to get the first position of `eos_token_id` value (`pad_token_ids` might equal to `eos_token_id`)
                 (input_ids.to(dtype=ms.int32) == self.eos_token_id).int().argmax(axis=-1),
             ]
@@ -641,9 +644,9 @@ class CLIPVisionTransformer(nn.Cell):
         embed_dim = config.hidden_size
 
         self.embeddings = CLIPVisionEmbeddings(config)
-        self.pre_layrnorm = nn.LayerNorm((embed_dim,), epsilon=config.layer_norm_eps)
+        self.pre_layrnorm = mint.nn.LayerNorm((embed_dim,), eps=config.layer_norm_eps)
         self.encoder = CLIPEncoder(config)
-        self.post_layernorm = nn.LayerNorm((embed_dim,), epsilon=config.layer_norm_eps)
+        self.post_layernorm = mint.nn.LayerNorm((embed_dim,), eps=config.layer_norm_eps)
 
     def construct(
         self,
@@ -775,8 +778,8 @@ class CLIPModel(CLIPPreTrainedModel):
         self.text_model = CLIPTextTransformer(text_config)
         self.vision_model = CLIPVisionTransformer(vision_config)
 
-        self.visual_projection = nn.Dense(self.vision_embed_dim, self.projection_dim, has_bias=False)
-        self.text_projection = nn.Dense(self.text_embed_dim, self.projection_dim, has_bias=False)
+        self.visual_projection = mint.nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
+        self.text_projection = mint.nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
         self.logit_scale = ms.Parameter(ms.Tensor(self.logit_scale_init_value), name="logit_scale")
 
         # Initialize weights and apply final processing
@@ -909,7 +912,7 @@ class CLIPModel(CLIPPreTrainedModel):
 
         >>> outputs = model(input_ids=Tensor(inputs.input_ids), pixel_values=Tensor(inputs.pixel_values))
         >>> logits_per_image = outputs[0]  # this is the image-text similarity score
-        >>> probs = ops.softmax(logits_per_image, axis=1)  # we can take the softmax to get the label probabilities
+        >>> probs = mint.nn.Softmax(logits_per_image, axis=1)  # we can take the softmax to get the label probabilities
         ```"""
         # Use CLIP model's config for some fields (if specified) instead of those of vision & text components.
         output_attentions = output_attentions if output_attentions is not None else self.output_attentions
@@ -942,7 +945,7 @@ class CLIPModel(CLIPPreTrainedModel):
 
         # cosine similarity as logits
         logit_scale = self.logit_scale.exp()
-        logits_per_text = ops.matmul(text_embeds, image_embeds.t()) * logit_scale
+        logits_per_text = mint.matmul(text_embeds, image_embeds.t()) * logit_scale
         logits_per_image = logits_per_text.t()
 
         loss = None
@@ -975,7 +978,7 @@ class CLIPTextModelWithProjection(CLIPPreTrainedModel):
 
         self.text_model = CLIPTextTransformer(config)
 
-        self.text_projection = nn.Dense(config.hidden_size, config.projection_dim, has_bias=False)
+        self.text_projection = mint.nn.Linear(config.hidden_size, config.projection_dim, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1049,7 +1052,7 @@ class CLIPVisionModelWithProjection(CLIPPreTrainedModel):
 
         self.vision_model = CLIPVisionTransformer(config)
 
-        self.visual_projection = nn.Dense(config.hidden_size, config.projection_dim, has_bias=False)
+        self.visual_projection = mint.nn.Linear(config.hidden_size, config.projection_dim, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()

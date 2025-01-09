@@ -22,7 +22,7 @@ from transformers.models.xlm_roberta.configuration_xlm_roberta import XLMRoberta
 from transformers.utils import logging
 
 import mindspore as ms
-from mindspore import nn, ops
+from mindspore import nn, ops, mint
 from mindspore.common.initializer import Normal, One, Zero, initializer
 
 from ...activations import ACT2FN
@@ -45,18 +45,18 @@ class XLMRobertaEmbeddings(nn.Cell):
     # Copied from transformers.models.bert.modeling_bert.BertEmbeddings.__init__
     def __init__(self, config):
         super().__init__()
-        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
-        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
-        self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
+        self.word_embeddings = mint.nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
+        self.position_embeddings = mint.nn.Embedding(config.max_position_embeddings, config.hidden_size)
+        self.token_type_embeddings = mint.nn.Embedding(config.type_vocab_size, config.hidden_size)
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
         self.LayerNorm = LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
+        self.dropout = mint.nn.Dropout(p=config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        self.position_ids = ops.arange(config.max_position_embeddings).unsqueeze(0)
-        self.token_type_ids = ops.zeros(self.position_ids.shape, dtype=ms.int32)
+        self.position_ids = mint.arange(config.max_position_embeddings).unsqueeze(0)
+        self.token_type_ids = mint.zeros(self.position_ids.shape, dtype=ms.int32)
 
         # End copy
         self.padding_idx = config.pad_token_id
@@ -90,7 +90,7 @@ class XLMRobertaEmbeddings(nn.Cell):
                 buffered_token_type_ids_expanded = buffered_token_type_ids.broadcast_to((input_shape[0], seq_length))
                 token_type_ids = buffered_token_type_ids_expanded
             else:
-                token_type_ids = ops.zeros(input_shape, dtype=ms.int32)
+                token_type_ids = mint.zeros(input_shape, dtype=ms.int32)
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
@@ -118,7 +118,7 @@ class XLMRobertaEmbeddings(nn.Cell):
         input_shape = inputs_embeds.shape[:-1]
         sequence_length = input_shape[1]
 
-        position_ids = ops.arange(self.padding_idx + 1, sequence_length + self.padding_idx + 1, dtype=ms.int32)
+        position_ids = mint.arange(self.padding_idx + 1, sequence_length + self.padding_idx + 1, dtype=ms.int32)
         return position_ids.unsqueeze(0).broadcast_to(input_shape)
 
 
@@ -136,15 +136,15 @@ class XLMRobertaSelfAttention(nn.Cell):
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        self.query = nn.Dense(config.hidden_size, self.all_head_size)
-        self.key = nn.Dense(config.hidden_size, self.all_head_size)
-        self.value = nn.Dense(config.hidden_size, self.all_head_size)
+        self.query = mint.nn.Linear(config.hidden_size, self.all_head_size)
+        self.key = mint.nn.Linear(config.hidden_size, self.all_head_size)
+        self.value = mint.nn.Linear(config.hidden_size, self.all_head_size)
 
-        self.dropout = nn.Dropout(p=config.attention_probs_dropout_prob)
+        self.dropout = mint.nn.Dropout(p=config.attention_probs_dropout_prob)
         self.position_embedding_type = position_embedding_type or getattr(config, "position_embedding_type", "absolute")
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
             self.max_position_embeddings = config.max_position_embeddings
-            self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
+            self.distance_embedding = mint.nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
 
         self.is_decoder = config.is_decoder
 
@@ -182,8 +182,8 @@ class XLMRobertaSelfAttention(nn.Cell):
         elif past_key_value is not None:
             key_layer = self.transpose_for_scores(self.key(hidden_states))
             value_layer = self.transpose_for_scores(self.value(hidden_states))
-            key_layer = ops.cat([past_key_value[0], key_layer], axis=2)
-            value_layer = ops.cat([past_key_value[1], value_layer], axis=2)
+            key_layer = mint.cat([past_key_value[0], key_layer], axis=2)
+            value_layer = mint.cat([past_key_value[1], value_layer], axis=2)
         else:
             key_layer = self.transpose_for_scores(self.key(hidden_states))
             value_layer = self.transpose_for_scores(self.value(hidden_states))
@@ -202,27 +202,27 @@ class XLMRobertaSelfAttention(nn.Cell):
             past_key_value = (key_layer, value_layer)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = ops.matmul(query_layer, key_layer.swapaxes(-1, -2))
+        attention_scores = mint.matmul(query_layer, key_layer.swapaxes(-1, -2))
 
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
             query_length, key_length = query_layer.shape[2], key_layer.shape[2]
             if use_cache:
                 position_ids_l = ms.tensor(key_length - 1, dtype=ms.int32).view(-1, 1)
             else:
-                position_ids_l = ops.arange(query_length, dtype=ms.int32).view(-1, 1)
-            position_ids_r = ops.arange(key_length, dtype=ms.int32).view(1, -1)
+                position_ids_l = mint.arange(query_length, dtype=ms.int32).view(-1, 1)
+            position_ids_r = mint.arange(key_length, dtype=ms.int32).view(1, -1)
             distance = position_ids_l - position_ids_r
 
             positional_embedding = self.distance_embedding(distance + self.max_position_embeddings - 1)
             positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
 
             if self.position_embedding_type == "relative_key":
-                relative_position_scores = ops.matmul(
+                relative_position_scores = mint.matmul(
                     query_layer.unsqueeze(3), positional_embedding.permute(0, 2, 1)
                 ).squeeze(3)
                 attention_scores = attention_scores + relative_position_scores
             elif self.position_embedding_type == "relative_key_query":
-                relative_position_scores_query = ops.matmul(
+                relative_position_scores_query = mint.matmul(
                     query_layer.unsqueeze(3), positional_embedding.permute(0, 2, 1)
                 ).squeeze(3)
                 relative_position_scores_key = (
@@ -230,7 +230,7 @@ class XLMRobertaSelfAttention(nn.Cell):
                 ).sum(-1)
                 attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
 
-        attention_scores = attention_scores / ops.sqrt(
+        attention_scores = attention_scores / mint.sqrt(
             ms.tensor(self.attention_head_size, dtype=attention_scores.dtype)
         )
         if attention_mask is not None:
@@ -238,7 +238,7 @@ class XLMRobertaSelfAttention(nn.Cell):
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
-        attention_probs = ops.softmax(attention_scores, axis=-1)
+        attention_probs = mint.nn.Softmax(dim=-1)(attention_scores)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
@@ -248,7 +248,7 @@ class XLMRobertaSelfAttention(nn.Cell):
         if head_mask is not None:
             attention_probs = attention_probs * head_mask
 
-        context_layer = ops.matmul(attention_probs, value_layer)
+        context_layer = mint.matmul(attention_probs, value_layer)
 
         context_layer = context_layer.permute(0, 2, 1, 3)
         new_context_layer_shape = context_layer.shape[:-2] + (self.all_head_size,)
@@ -265,9 +265,9 @@ class XLMRobertaSelfAttention(nn.Cell):
 class XLMRobertaSelfOutput(nn.Cell):
     def __init__(self, config):
         super().__init__()
-        self.dense = nn.Dense(config.hidden_size, config.hidden_size)
+        self.dense = mint.nn.Linear(config.hidden_size, config.hidden_size)
         self.LayerNorm = LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
+        self.dropout = mint.nn.Dropout(p=config.hidden_dropout_prob)
 
     def construct(self, hidden_states: ms.Tensor, input_tensor: ms.Tensor) -> ms.Tensor:
         hidden_states = self.dense(hidden_states)
@@ -337,7 +337,7 @@ class XLMRobertaAttention(nn.Cell):
 class XLMRobertaIntermediate(nn.Cell):
     def __init__(self, config):
         super().__init__()
-        self.dense = nn.Dense(config.hidden_size, config.intermediate_size)
+        self.dense = mint.nn.Linear(config.hidden_size, config.intermediate_size)
         if isinstance(config.hidden_act, str):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
         else:
@@ -353,9 +353,9 @@ class XLMRobertaIntermediate(nn.Cell):
 class XLMRobertaOutput(nn.Cell):
     def __init__(self, config):
         super().__init__()
-        self.dense = nn.Dense(config.intermediate_size, config.hidden_size)
+        self.dense = mint.nn.Linear(config.intermediate_size, config.hidden_size)
         self.LayerNorm = LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
+        self.dropout = mint.nn.Dropout(p=config.hidden_dropout_prob)
 
     def construct(self, hidden_states: ms.Tensor, input_tensor: ms.Tensor) -> ms.Tensor:
         hidden_states = self.dense(hidden_states)
@@ -540,8 +540,8 @@ class XLMRobertaEncoder(nn.Cell):
 class XLMRobertaPooler(nn.Cell):
     def __init__(self, config):
         super().__init__()
-        self.dense = nn.Dense(config.hidden_size, config.hidden_size)
-        self.activation = nn.Tanh()
+        self.dense = mint.nn.Linear(config.hidden_size, config.hidden_size)
+        self.activation = mint.tanh
 
     def construct(self, hidden_states: ms.Tensor) -> ms.Tensor:
         # We "pool" the model by simply taking the hidden state corresponding
@@ -567,7 +567,7 @@ class XLMRobertaPreTrainedModel(MSPreTrainedModel):
     # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Dense):
+        if isinstance(module, mint.nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.set_data(
@@ -704,7 +704,7 @@ class XLMRobertaModel(XLMRobertaPreTrainedModel):
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if attention_mask is None:
-            attention_mask = ops.ones(((batch_size, seq_length + past_key_values_length)))
+            attention_mask = mint.ones(((batch_size, seq_length + past_key_values_length)))
 
         if token_type_ids is None:
             if hasattr(self.embeddings, "token_type_ids"):
@@ -712,7 +712,7 @@ class XLMRobertaModel(XLMRobertaPreTrainedModel):
                 buffered_token_type_ids_expanded = buffered_token_type_ids.broadcast_to((batch_size, seq_length))
                 token_type_ids = buffered_token_type_ids_expanded
             else:
-                token_type_ids = ops.zeros(input_shape, dtype=ms.int64)
+                token_type_ids = mint.zeros(input_shape, dtype=ms.int64)
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
@@ -723,7 +723,7 @@ class XLMRobertaModel(XLMRobertaPreTrainedModel):
         if self.is_decoder and encoder_hidden_states is not None:
             encoder_hidden_shape = encoder_hidden_states.shape[:2]
             if encoder_attention_mask is None:
-                encoder_attention_mask = ops.ones(encoder_hidden_shape)
+                encoder_attention_mask = mint.ones(encoder_hidden_shape)
             encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
         else:
             encoder_extended_attention_mask = None
@@ -845,14 +845,14 @@ class LayerNorm(nn.Cell):
 
         >>> # NLP Example
         >>> batch, sentence_length, embedding_dim = 20, 5, 10
-        >>> embedding = ops.randn(batch, sentence_length, embedding_dim)
+        >>> embedding = mint.randn(batch, sentence_length, embedding_dim)
         >>> layer_norm = LayerNorm(embedding_dim)
         >>> # Activate module
         >>> layer_norm(embedding)
         >>>
         >>> # Image Example
         >>> N, C, H, W = 20, 5, 10, 10
-        >>> input = ops.randn(N, C, H, W)
+        >>> input = mint.randn(N, C, H, W)
         >>> # Normalize over the last three dimensions (i.e. the channel and spatial dimensions)
         >>> # as shown in the image below
         >>> layer_norm = LayerNorm([C, H, W])

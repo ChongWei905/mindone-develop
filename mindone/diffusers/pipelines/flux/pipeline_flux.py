@@ -19,7 +19,7 @@ import numpy as np
 from transformers import CLIPTokenizer, T5TokenizerFast
 
 import mindspore as ms
-from mindspore import ops
+from mindspore import mint
 
 from ....transformers import CLIPTextModel, T5EncoderModel
 from ...image_processor import VaeImageProcessor
@@ -339,7 +339,7 @@ class FluxPipeline(DiffusionPipeline, FluxLoraLoaderMixin):
                 unscale_lora_layers(self.text_encoder_2, lora_scale)
 
         dtype = self.text_encoder.dtype if self.text_encoder is not None else self.transformer.dtype
-        text_ids = ops.zeros((batch_size, prompt_embeds.shape[1], 3), dtype=dtype)
+        text_ids = mint.zeros((batch_size, prompt_embeds.shape[1], 3), dtype=dtype)
         text_ids = text_ids.tile((num_images_per_prompt, 1, 1))
 
         return prompt_embeds, pooled_prompt_embeds, text_ids
@@ -394,9 +394,9 @@ class FluxPipeline(DiffusionPipeline, FluxLoraLoaderMixin):
 
     @staticmethod
     def _prepare_latent_image_ids(batch_size, height, width, dtype):
-        latent_image_ids = ops.zeros((height // 2, width // 2, 3))
-        latent_image_ids[..., 1] = latent_image_ids[..., 1] + ops.arange(height // 2)[:, None]
-        latent_image_ids[..., 2] = latent_image_ids[..., 2] + ops.arange(width // 2)[None, :]
+        latent_image_ids = mint.zeros((height // 2, width // 2, 3))
+        latent_image_ids[..., 1] = latent_image_ids[..., 1] + mint.arange(height // 2)[:, None]
+        latent_image_ids[..., 2] = latent_image_ids[..., 2] + mint.arange(width // 2)[None, :]
 
         latent_image_id_height, latent_image_id_width, latent_image_id_channels = latent_image_ids.shape
 

@@ -18,7 +18,7 @@ import numpy as np
 from transformers import CLIPTokenizer
 
 import mindspore as ms
-from mindspore import ops
+from mindspore import mint
 
 from mindone.transformers import CLIPTextModel
 
@@ -378,7 +378,7 @@ class StableCascadeDecoderPipeline(DiffusionPipeline):
             callback_on_step_end_tensor_inputs=callback_on_step_end_tensor_inputs,
         )
         if isinstance(image_embeddings, list):
-            image_embeddings = ops.cat(image_embeddings, axis=0)
+            image_embeddings = mint.cat(image_embeddings, dim=0)
 
         if prompt is not None and isinstance(prompt, str):
             batch_size = 1
@@ -409,12 +409,12 @@ class StableCascadeDecoderPipeline(DiffusionPipeline):
 
         # The pooled embeds from the prior are pooled again before being passed to the decoder
         prompt_embeds_pooled = (
-            ops.cat([prompt_embeds_pooled, negative_prompt_embeds_pooled])
+            mint.cat([prompt_embeds_pooled, negative_prompt_embeds_pooled])
             if self.do_classifier_free_guidance
             else prompt_embeds_pooled
         )
         effnet = (
-            ops.cat([image_embeddings, ops.zeros_like(image_embeddings)])
+            mint.cat([image_embeddings, mint.zeros_like(image_embeddings)])
             if self.do_classifier_free_guidance
             else image_embeddings
         )
@@ -434,8 +434,8 @@ class StableCascadeDecoderPipeline(DiffusionPipeline):
 
             # 7. Denoise latents
             predicted_latents = self.decoder(
-                sample=ops.cat([latents] * 2) if self.do_classifier_free_guidance else latents,
-                timestep_ratio=ops.cat([timestep_ratio] * 2) if self.do_classifier_free_guidance else timestep_ratio,
+                sample=mint.cat([latents] * 2) if self.do_classifier_free_guidance else latents,
+                timestep_ratio=mint.cat([timestep_ratio] * 2) if self.do_classifier_free_guidance else timestep_ratio,
                 clip_text_pooled=prompt_embeds_pooled,
                 effnet=effnet,
                 return_dict=False,
@@ -444,7 +444,7 @@ class StableCascadeDecoderPipeline(DiffusionPipeline):
             # 8. Check for classifier free guidance and apply it
             if self.do_classifier_free_guidance:
                 predicted_latents_text, predicted_latents_uncond = predicted_latents.chunk(2)
-                predicted_latents = ops.lerp(
+                predicted_latents = mint.lerp(
                     predicted_latents_uncond,
                     predicted_latents_text,
                     ms.tensor(self.guidance_scale, dtype=predicted_latents_text.dtype),

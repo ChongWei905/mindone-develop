@@ -19,7 +19,7 @@ import numpy as np
 from transformers import BertTokenizer, CLIPImageProcessor, MT5Tokenizer
 
 import mindspore as ms
-from mindspore import ops
+from mindspore import mint, ops
 
 from mindone.diffusers.pipelines.stable_diffusion import StableDiffusionPipelineOutput
 from mindone.transformers import BertModel, T5EncoderModel
@@ -125,8 +125,8 @@ def rescale_noise_cfg(noise_cfg, noise_pred_text, guidance_rescale=0.0):
     Rescale `noise_cfg` according to `guidance_rescale`. Based on findings of [Common Diffusion Noise Schedules and
     Sample Steps are Flawed](https://arxiv.org/pdf/2305.08891.pdf). See Section 3.4
     """
-    std_text = noise_pred_text.std(axis=list(range(1, noise_pred_text.ndim)), keepdims=True)
-    std_cfg = noise_cfg.std(axis=list(range(1, noise_cfg.ndim)), keepdims=True)
+    std_text = mint.std(noise_pred_text, dim=list(range(1, noise_pred_text.ndim)), keepdim=True)
+    std_cfg = mint.std(noise_cfg, dim=list(range(1, noise_cfg.ndim)), keepdim=True)
     # rescale the results from guidance (fixes overexposure)
     noise_pred_rescaled = noise_cfg * (std_text / std_cfg)
     # mix with the original results from guidance by factor guidance_rescale to avoid "plain looking" images
@@ -810,15 +810,15 @@ class HunyuanDiTPAGPipeline(DiffusionPipeline, PAGMixin):
             prompt_attention_mask_2 = self._prepare_perturbed_attention_guidance(
                 prompt_attention_mask_2, negative_prompt_attention_mask_2, self.do_classifier_free_guidance
             )
-            add_time_ids = ops.cat([add_time_ids] * 3, axis=0)
-            style = ops.cat([style] * 3, axis=0)
+            add_time_ids = mint.cat([add_time_ids] * 3, dim=0)
+            style = mint.cat([style] * 3, dim=0)
         elif self.do_classifier_free_guidance:
-            prompt_embeds = ops.cat([negative_prompt_embeds, prompt_embeds])
-            prompt_attention_mask = ops.cat([negative_prompt_attention_mask, prompt_attention_mask])
-            prompt_embeds_2 = ops.cat([negative_prompt_embeds_2, prompt_embeds_2])
-            prompt_attention_mask_2 = ops.cat([negative_prompt_attention_mask_2, prompt_attention_mask_2])
-            add_time_ids = ops.cat([add_time_ids] * 2, axis=0)
-            style = ops.cat([style] * 2, axis=0)
+            prompt_embeds = mint.cat([negative_prompt_embeds, prompt_embeds])
+            prompt_attention_mask = mint.cat([negative_prompt_attention_mask, prompt_attention_mask])
+            prompt_embeds_2 = mint.cat([negative_prompt_embeds_2, prompt_embeds_2])
+            prompt_attention_mask_2 = mint.cat([negative_prompt_attention_mask_2, prompt_attention_mask_2])
+            add_time_ids = mint.cat([add_time_ids] * 2, dim=0)
+            style = mint.cat([style] * 2, dim=0)
 
         add_time_ids = add_time_ids.to(dtype=prompt_embeds.dtype).tile((batch_size * num_images_per_prompt, 1))
         style = style.tile((batch_size * num_images_per_prompt,))
@@ -840,7 +840,7 @@ class HunyuanDiTPAGPipeline(DiffusionPipeline, PAGMixin):
                     continue
 
                 # expand the latents if we are doing classifier free guidance
-                latent_model_input = ops.cat([latents] * (prompt_embeds.shape[0] // latents.shape[0]))
+                latent_model_input = mint.cat([latents] * (prompt_embeds.shape[0] // latents.shape[0]))
                 latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
 
                 # expand scalar t to 1-D tensor to match the 1st dim of latent_model_input
@@ -860,7 +860,7 @@ class HunyuanDiTPAGPipeline(DiffusionPipeline, PAGMixin):
                     return_dict=False,
                 )[0]
 
-                noise_pred, _ = noise_pred.chunk(2, axis=1)
+                noise_pred, _ = mint.chunk(noise_pred, 2, dim=1)
 
                 # perform guidance
                 if self.do_perturbed_attention_guidance:

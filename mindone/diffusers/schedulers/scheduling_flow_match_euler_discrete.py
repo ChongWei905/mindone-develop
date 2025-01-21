@@ -19,7 +19,7 @@ from typing import List, Optional, Tuple, Union
 import numpy as np
 
 import mindspore as ms
-from mindspore import ops
+from mindspore import mint
 
 from ..configuration_utils import ConfigMixin, register_to_config
 from ..utils import BaseOutput, logging
@@ -150,10 +150,10 @@ class FlowMatchEulerDiscreteScheduler(SchedulerMixin, ConfigMixin):
             # add noise is called before first denoising step to create initial latent(img2img)
             step_indices = [self.begin_index] * timestep.shape[0]
 
-        sigma = sigmas[step_indices].flatten()
+        sigma = mint.flatten(sigmas[step_indices])
         # while len(sigma.shape) < len(sample.shape):
         #     sigma = sigma.unsqueeze(-1)
-        sigma = ops.reshape(sigma, (timestep.shape[0],) + (1,) * (len(broadcast_shape) - 1))
+        sigma = mint.reshape(sigma, (timestep.shape[0],) + (1,) * (len(broadcast_shape) - 1))
 
         sample = sigma * noise + (1.0 - sigma) * sample
 
@@ -199,7 +199,7 @@ class FlowMatchEulerDiscreteScheduler(SchedulerMixin, ConfigMixin):
         timesteps = sigmas * self.config.num_train_timesteps
 
         self.timesteps = timesteps
-        self.sigmas = ops.cat([sigmas, ops.zeros((1,))])
+        self.sigmas = mint.cat([sigmas, mint.zeros((1,))])
 
         self._step_index = None
         self._begin_index = None

@@ -79,8 +79,10 @@ class UnCLIPTextProjModel(ModelMixin, ConfigMixin):
         # ... and by projecting CLIP embeddings into four
         # extra tokens of context that are concatenated to the sequence of outputs from the GLIDE text encoder"
         clip_extra_context_tokens = self.clip_extra_context_tokens_proj(image_embeddings)
-        clip_extra_context_tokens = clip_extra_context_tokens.reshape(batch_size, -1, self.clip_extra_context_tokens)
-        clip_extra_context_tokens = clip_extra_context_tokens.permute(0, 2, 1)
+        clip_extra_context_tokens = mint.reshape(
+            clip_extra_context_tokens, (batch_size, -1, self.clip_extra_context_tokens)
+        )
+        clip_extra_context_tokens = mint.permute(clip_extra_context_tokens, (0, 2, 1))
 
         text_encoder_hidden_states = self.encoder_hidden_states_proj(text_encoder_hidden_states)
         text_encoder_hidden_states = self.text_encoder_hidden_states_norm(text_encoder_hidden_states)

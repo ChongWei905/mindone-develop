@@ -603,7 +603,7 @@ class StableDiffusionImg2ImgPipeline(
         image = self.vae.decode(latents, return_dict=False)[0]
         image = (image / 2 + 0.5).clamp(0, 1)
         # we always cast to float32 as this does not cause significant overhead and is compatible with bfloat16
-        image = image.permute(0, 2, 3, 1).float().numpy()
+        image = mint.permute(image, (0, 2, 3, 1)).float().numpy()
         return image
 
     def prepare_extra_step_kwargs(self, generator, eta):

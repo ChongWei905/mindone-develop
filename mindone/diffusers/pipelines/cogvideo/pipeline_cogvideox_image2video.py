@@ -364,7 +364,7 @@ class CogVideoXImageToVideoPipeline(DiffusionPipeline):
                 retrieve_latents(self.vae, self.vae.encode(img.unsqueeze(0))[0], generator) for img in image
             ]
 
-        image_latents = mint.cat(image_latents, dim=0).to(dtype).permute(0, 2, 1, 3, 4)  # [B, F, C, H, W]
+        image_latents = mint.permute(mint.cat(image_latents, dim=0).to(dtype), (0, 2, 1, 3, 4))  # [B, F, C, H, W]
         image_latents = self.vae.config.scaling_factor * image_latents
 
         padding_shape = (
@@ -386,7 +386,7 @@ class CogVideoXImageToVideoPipeline(DiffusionPipeline):
 
     # Copied from diffusers.pipelines.cogvideo.pipeline_cogvideox.CogVideoXPipeline.decode_latents
     def decode_latents(self, latents: ms.Tensor) -> ms.Tensor:
-        latents = latents.permute(0, 2, 1, 3, 4)  # [batch_size, num_channels, num_frames, height, width]
+        latents = mint.permute(latents, (0, 2, 1, 3, 4))  # [batch_size, num_channels, num_frames, height, width]
         latents = 1 / self.vae.config.scaling_factor * latents
 
         frames = self.vae.decode(latents)[0]

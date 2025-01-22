@@ -345,7 +345,9 @@ class I2VGenXLPipeline(DiffusionPipeline, StableDiffusionMixin):
         latents = 1 / self.vae.config.scaling_factor * latents
 
         batch_size, channels, num_frames, height, width = latents.shape
-        latents = latents.permute(0, 2, 1, 3, 4).reshape(batch_size * num_frames, channels, height, width)
+        latents = mint.reshape(
+            mint.permute(latents, (0, 2, 1, 3, 4)), (batch_size * num_frames, channels, height, width)
+        )
 
         if decode_chunk_size is not None:
             frames = []
@@ -357,7 +359,7 @@ class I2VGenXLPipeline(DiffusionPipeline, StableDiffusionMixin):
             image = self.vae.decode(latents)[0]
 
         decode_shape = (batch_size, num_frames, -1) + image.shape[2:]
-        video = image[None, :].reshape(decode_shape).permute(0, 2, 1, 3, 4)
+        video = mint.permute(mint.reshape(image[None, :], decode_shape), (0, 2, 1, 3, 4))
 
         # we always cast to float32 as this does not cause significant overhead and is compatible with bfloat16
         video = video.float()
@@ -690,8 +692,12 @@ class I2VGenXLPipeline(DiffusionPipeline, StableDiffusionMixin):
 
                 # reshape latents
                 batch_size, channel, frames, width, height = latents.shape
-                latents = latents.permute(0, 2, 1, 3, 4).reshape(batch_size * frames, channel, width, height)
-                noise_pred = noise_pred.permute(0, 2, 1, 3, 4).reshape(batch_size * frames, channel, width, height)
+                latents = mint.reshape(
+                    mint.permute(latents, (0, 2, 1, 3, 4)), (batch_size * frames, channel, width, height)
+                )
+                noise_pred = mint.reshape(
+                    mint.permute(noise_pred, (0, 2, 1, 3, 4)), (batch_size * frames, channel, width, height)
+                )
 
                 # compute the previous noisy sample x_t -> x_t-1
                 # TODO: method of scheduler should not change the dtype of input.
@@ -701,7 +707,9 @@ class I2VGenXLPipeline(DiffusionPipeline, StableDiffusionMixin):
                 latents = latents.to(tmp_dtype)
 
                 # reshape latents back
-                latents = latents[None, :].reshape(batch_size, frames, channel, width, height).permute(0, 2, 1, 3, 4)
+                latents = mint.permute(
+                    mint.reshape(latents[None, :], (batch_size, frames, channel, width, height)), (0, 2, 1, 3, 4)
+                )
                 # call the callback, if provided
                 if i == len(timesteps) - 1 or ((i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0):
                     progress_bar.update()

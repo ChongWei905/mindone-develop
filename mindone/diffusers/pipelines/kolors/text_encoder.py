@@ -204,7 +204,7 @@ class CoreAttention(nn.Cell):
         # change view [b, np, sq, hn]
         context_layer = context_layer.view(output_size)
         # [b, np, sq, hn] --> [sq, b, np, hn]
-        context_layer = context_layer.permute(2, 0, 1, 3)
+        context_layer = mint.permute(context_layer, (2, 0, 1, 3))
         # [sq, b, np, hn] --> [sq, b, hp]
         new_context_layer_shape = context_layer.shape[:-2] + (self.hidden_size_per_partition,)
         context_layer = context_layer.view(new_context_layer_shape)
@@ -777,7 +777,7 @@ class ChatGLMModel(ChatGLMPreTrainedModel):
         )
         # seq_len, b, nh, hidden_size
         past_key_values = self.dropout(past_key_values)
-        past_key_values = past_key_values.permute([2, 1, 0, 3, 4]).split(2)
+        past_key_values = mint.permute(past_key_values, ([2, 1, 0, 3, 4])).split(2)
         return past_key_values
 
     def construct(

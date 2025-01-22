@@ -841,8 +841,8 @@ class IFSuperResolutionPipeline(DiffusionPipeline, LoraLoaderMixin):
 
         if output_type == "pil":
             # 9. Post-processing
-            image = (image / 2 + 0.5).clamp(0, 1)
-            image = image.permute(0, 2, 3, 1).float()
+            image = mint.clamp((image / 2 + 0.5), 0, 1)
+            image = mint.permute(image, (0, 2, 3, 1)).float()
 
             # 10. Run safety checker
             image, nsfw_detected, watermark_detected = self.run_safety_checker(image, prompt_embeds.dtype)
@@ -858,8 +858,8 @@ class IFSuperResolutionPipeline(DiffusionPipeline, LoraLoaderMixin):
             watermark_detected = None
         else:
             # 9. Post-processing
-            image = (image / 2 + 0.5).clamp(0, 1)
-            image = image.permute(0, 2, 3, 1).float()
+            image = mint.clamp((image / 2 + 0.5), 0, 1)
+            image = mint.permute(image, (0, 2, 3, 1)).float()
 
             # 10. Run safety checker
             image, nsfw_detected, watermark_detected = self.run_safety_checker(image, prompt_embeds.dtype)

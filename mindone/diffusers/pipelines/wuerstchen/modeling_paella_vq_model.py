@@ -49,11 +49,11 @@ class MixingResidualBlock(nn.Cell):
 
     def construct(self, x):
         mods = self.gammas
-        x_temp = self.norm1(x.permute((0, 2, 3, 1))).permute((0, 3, 1, 2)) * (1 + mods[0]) + mods[1]
+        x_temp = mint.permute(self.norm1(mint.permute(x, (0, 2, 3, 1))), (0, 3, 1, 2)) * (1 + mods[0]) + mods[1]
         x_temp = _pad(x_temp, pad=(1, 1, 1, 1), mode="replicate")
         x = x + self.depthwise(x_temp) * mods[2]
-        x_temp = self.norm2(x.permute((0, 2, 3, 1))).permute((0, 3, 1, 2)) * (1 + mods[3]) + mods[4]
-        x = x + self.channelwise(x_temp.permute((0, 2, 3, 1))).permute((0, 3, 1, 2)) * mods[5]
+        x_temp = mint.permute(self.norm2(mint.permute(x, (0, 2, 3, 1))), (0, 3, 1, 2)) * (1 + mods[3]) + mods[4]
+        x = x + mint.permute(self.channelwise(mint.permute(x_temp, (0, 2, 3, 1))), (0, 3, 1, 2)) * mods[5]
         return x
 
 

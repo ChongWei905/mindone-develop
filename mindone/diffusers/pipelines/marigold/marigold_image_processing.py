@@ -52,7 +52,7 @@ class MarigoldImageProcessor(ConfigMixin):
         """
         Convert a PyTorch tensor to a NumPy image.
         """
-        images = images.permute(0, 2, 3, 1).float().numpy()
+        images = mint.permute(images, (0, 2, 3, 1)).float().numpy()
         return images
 
     @staticmethod
@@ -504,7 +504,7 @@ class MarigoldImageProcessor(ConfigMixin):
             )
 
         def visualize_normals_one(img, idx=None):
-            img = img.permute(1, 2, 0)
+            img = mint.permute(img, (1, 2, 0))
             if flip_vec is not None:
                 img *= flip_vec
             img = (img + 1.0) * 0.5

@@ -245,7 +245,7 @@ class LDMTextToImagePipeline(DiffusionPipeline):
         image = self.vqvae.decode(latents)[0]
 
         image = (image / 2 + 0.5).clamp(0, 1)
-        image = image.permute(0, 2, 3, 1).asnumpy()
+        image = mint.permute(image, (0, 2, 3, 1)).asnumpy()
         if output_type == "pil":
             image = self.numpy_to_pil(image)
 

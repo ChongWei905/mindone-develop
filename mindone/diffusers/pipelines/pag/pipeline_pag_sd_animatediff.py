@@ -397,7 +397,9 @@ class AnimateDiffPAGPipeline(
         latents = 1 / self.vae.config.scaling_factor * latents
 
         batch_size, channels, num_frames, height, width = latents.shape
-        latents = latents.permute(0, 2, 1, 3, 4).reshape(batch_size * num_frames, channels, height, width)
+        latents = mint.reshape(
+            mint.permute(latents, (0, 2, 1, 3, 4)), (batch_size * num_frames, channels, height, width)
+        )
 
         video = []
         for i in range(0, latents.shape[0], decode_chunk_size):
@@ -406,7 +408,9 @@ class AnimateDiffPAGPipeline(
             video.append(batch_latents)
 
         video = mint.cat(video)
-        video = video[None, :].reshape((batch_size, num_frames, -1) + video.shape[2:]).permute(0, 2, 1, 3, 4)
+        video = mint.permute(
+            mint.reshape(video[None, :], ((batch_size, num_frames, -1) + video.shape[2:])), (0, 2, 1, 3, 4)
+        )
         # we always cast to float32 as this does not cause significant overhead and is compatible with bfloat16
         video = video.float()
         return video

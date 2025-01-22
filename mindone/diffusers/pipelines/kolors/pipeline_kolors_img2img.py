@@ -285,7 +285,7 @@ class KolorsImg2ImgPipeline(DiffusionPipeline, StableDiffusionMixin, StableDiffu
 
                 # [max_sequence_length, batch, hidden_size] -> [batch, max_sequence_length, hidden_size]
                 # clone to have a contiguous tensor
-                prompt_embeds = output[2][-2].permute(1, 0, 2).copy()
+                prompt_embeds = mint.permute(output[2][-2], (1, 0, 2)).copy()
                 # [max_sequence_length, batch, hidden_size] -> [batch, hidden_size]
                 pooled_prompt_embeds = output[2][-1][-1, :, :].copy()
                 bs_embed, seq_len, _ = prompt_embeds.shape
@@ -342,7 +342,7 @@ class KolorsImg2ImgPipeline(DiffusionPipeline, StableDiffusionMixin, StableDiffu
 
                 # [max_sequence_length, batch, hidden_size] -> [batch, max_sequence_length, hidden_size]
                 # clone to have a contiguous tensor
-                negative_prompt_embeds = output[2][-2].permute(1, 0, 2).copy()
+                negative_prompt_embeds = mint.permute(output[2][-2], (1, 0, 2)).copy()
                 # [max_sequence_length, batch, hidden_size] -> [batch, hidden_size]
                 negative_pooled_prompt_embeds = output[2][-1][-1, :, :].copy()
 

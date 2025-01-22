@@ -497,10 +497,14 @@ class AnimateDiffVideoToVideoPipeline(
         latents = 1 / self.vae.config.scaling_factor * latents
 
         batch_size, channels, num_frames, height, width = latents.shape
-        latents = latents.permute(0, 2, 1, 3, 4).reshape(batch_size * num_frames, channels, height, width)
+        latents = mint.reshape(
+            mint.permute(latents, (0, 2, 1, 3, 4)), (batch_size * num_frames, channels, height, width)
+        )
 
         image = self.vae.decode(latents)[0]
-        video = image[None, :].reshape((batch_size, num_frames, -1) + image.shape[2:]).permute(0, 2, 1, 3, 4)
+        video = mint.permute(
+            mint.reshape(image[None, :], (batch_size, num_frames, -1) + image.shape[2:]), (0, 2, 1, 3, 4)
+        )
         # we always cast to float32 as this does not cause significant overhead and is compatible with bfloat16
         video = video.float()
         return video
@@ -681,7 +685,7 @@ class AnimateDiffVideoToVideoPipeline(
                 init_latents = mint.cat([init_latents], dim=0)
 
             noise = randn_tensor(init_latents.shape, generator=generator, dtype=dtype)
-            latents = self.scheduler.add_noise(init_latents, noise, timestep).permute(0, 2, 1, 3, 4)
+            latents = mint.permute(self.scheduler.add_noise(init_latents, noise, timestep), (0, 2, 1, 3, 4))
         else:
             if shape != latents.shape:
                 # [B, C, F, H, W]
@@ -896,7 +900,7 @@ class AnimateDiffVideoToVideoPipeline(
         if latents is None:
             video = self.video_processor.preprocess_video(video, height=height, width=width)
             # Move the number of frames before the number of channels.
-            video = video.permute(0, 2, 1, 3, 4)
+            video = mint.permute(video, (0, 2, 1, 3, 4))
             video = video.to(prompt_embeds.dtype)
         num_channels_latents = self.unet.config.in_channels
         latents = self.prepare_latents(

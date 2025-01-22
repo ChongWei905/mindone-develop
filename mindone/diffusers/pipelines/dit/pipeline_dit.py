@@ -222,7 +222,7 @@ class DiTPipeline(DiffusionPipeline):
         samples = (samples / 2 + 0.5).clamp(0, 1)
 
         # we always cast to float32 as this does not cause significant overhead and is compatible with bfloat16
-        samples = samples.permute(0, 2, 3, 1).float().asnumpy()
+        samples = mint.permute(samples, (0, 2, 3, 1)).float().asnumpy()
 
         if output_type == "pil":
             samples = self.numpy_to_pil(samples)

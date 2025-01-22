@@ -826,7 +826,7 @@ class LattePipeline(DiffusionPipeline):
     # Similar to diffusers.pipelines.stable_video_diffusion.pipeline_stable_video_diffusion.decode_latents
     def decode_latents(self, latents: ms.Tensor, video_length: int, decode_chunk_size: int = 14):
         # [batch, channels, frames, height, width] -> [batch*frames, channels, height, width]
-        latents = latents.permute(0, 2, 1, 3, 4).flatten(start_dim=0, end_dim=1)
+        latents = mint.flatten(mint.permute(latents, (0, 2, 1, 3, 4)), start_dim=0, end_dim=1)
 
         latents = 1 / self.vae.config.scaling_factor * latents
 
@@ -847,7 +847,7 @@ class LattePipeline(DiffusionPipeline):
         frames = mint.cat(frames, dim=0)
 
         # [batch*frames, channels, height, width] -> [batch, channels, frames, height, width]
-        frames = frames.reshape((-1, video_length) + frames.shape[1:]).permute(0, 2, 1, 3, 4)
+        frames = mint.permute(mint.reshape(frames, ((-1, video_length) + frames.shape[1:])), (0, 2, 1, 3, 4))
 
         # we always cast to float32 as this does not cause significant overhead and is compatible with bfloa16
         frames = frames.float()

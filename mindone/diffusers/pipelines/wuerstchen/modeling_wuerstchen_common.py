@@ -11,9 +11,9 @@ class WuerstchenLayerNorm(LayerNorm):
         super().__init__(*args, **kwargs)
 
     def construct(self, x):
-        x = x.permute((0, 2, 3, 1))
+        x = mint.permute(x, (0, 2, 3, 1))
         x = super().construct(x)
-        return x.permute((0, 3, 1, 2))
+        return mint.permute(x, (0, 3, 1, 2))
 
 
 class TimestepBlock(nn.Cell):
@@ -45,8 +45,8 @@ class ResBlock(nn.Cell):
         x_res = x
         if x_skip is not None:
             x = mint.cat([x, x_skip], dim=1)
-        x = self.norm(self.depthwise(x)).permute((0, 2, 3, 1))
-        x = self.channelwise(x).permute((0, 3, 1, 2))
+        x = mint.permute(self.norm(self.depthwise(x)), (0, 2, 3, 1))
+        x = mint.permute(self.channelwise(x), (0, 3, 1, 2))
         return x + x_res
 
 

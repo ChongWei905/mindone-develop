@@ -297,7 +297,7 @@ class StableVideoDiffusionPipeline(DiffusionPipeline):
         frames = mint.cat(frames, dim=0)
 
         # [batch*frames, channels, height, width] -> [batch, channels, frames, height, width]
-        frames = frames.reshape(-1, num_frames, *frames.shape[1:]).permute((0, 2, 1, 3, 4))
+        frames = mint.permute(mint.reshape(frames, (-1, num_frames, *frames.shape[1:])), (0, 2, 1, 3, 4))
 
         # we always cast to float32 as this does not cause significant overhead and is compatible with bfloat16
         frames = frames.float()

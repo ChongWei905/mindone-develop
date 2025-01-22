@@ -234,7 +234,7 @@ class LDMTextToImagePipeline(DiffusionPipeline):
             noise_pred = self.unet(latents_input, t, encoder_hidden_states=context)[0]
             # perform guidance
             if guidance_scale != 1.0:
-                noise_pred_uncond, noise_prediction_text = noise_pred.chunk(2)
+                noise_pred_uncond, noise_prediction_text = mint.chunk(noise_pred, 2)
                 noise_pred = noise_pred_uncond + guidance_scale * (noise_prediction_text - noise_pred_uncond)
 
             # compute the previous noisy sample x_t -> x_t-1

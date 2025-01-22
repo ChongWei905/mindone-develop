@@ -824,7 +824,7 @@ def convert_stable_cascade_unet_single_file_to_diffusers(checkpoint, **kwargs):
         state_dict = {}
         for key in checkpoint.keys():
             if key.endswith("in_proj_weight"):
-                weights = checkpoint[key].chunk(3, 0)
+                weights = mint.chunk(checkpoint[key], 3, 0)
                 state_dict[key.replace("attn.in_proj_weight", "to_q.weight")] = Parameter(
                     weights[0], name=key.replace("attn.in_proj_weight", "to_q.weight")
                 )
@@ -835,7 +835,7 @@ def convert_stable_cascade_unet_single_file_to_diffusers(checkpoint, **kwargs):
                     weights[2], name=key.replace("attn.in_proj_weight", "to_v.weight")
                 )
             elif key.endswith("in_proj_bias"):
-                weights = checkpoint[key].chunk(3, 0)
+                weights = mint.chunk(checkpoint[key], 3, 0)
                 state_dict[key.replace("attn.in_proj_bias", "to_q.bias")] = Parameter(
                     weights[0], name=key.replace("attn.in_proj_bias", "to_q.bias")
                 )
@@ -857,7 +857,7 @@ def convert_stable_cascade_unet_single_file_to_diffusers(checkpoint, **kwargs):
         state_dict = {}
         for key in checkpoint.keys():
             if key.endswith("in_proj_weight"):
-                weights = checkpoint[key].chunk(3, 0)
+                weights = mint.chunk(checkpoint[key], 3, 0)
                 state_dict[key.replace("attn.in_proj_weight", "to_q.weight")] = Parameter(
                     weights[0], name=key.replace("attn.in_proj_weight", "to_q.weight")
                 )
@@ -868,7 +868,7 @@ def convert_stable_cascade_unet_single_file_to_diffusers(checkpoint, **kwargs):
                     weights[2], name=key.replace("attn.in_proj_weight", "to_v.weight")
                 )
             elif key.endswith("in_proj_bias"):
-                weights = checkpoint[key].chunk(3, 0)
+                weights = mint.chunk(checkpoint[key], 3, 0)
                 state_dict[key.replace("attn.in_proj_bias", "to_q.bias")] = Parameter(
                     weights[0], name=key.replace("attn.in_proj_bias", "to_q.bias")
                 )

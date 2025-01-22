@@ -443,7 +443,7 @@ class StableCascadeDecoderPipeline(DiffusionPipeline):
 
             # 8. Check for classifier free guidance and apply it
             if self.do_classifier_free_guidance:
-                predicted_latents_text, predicted_latents_uncond = predicted_latents.chunk(2)
+                predicted_latents_text, predicted_latents_uncond = mint.chunk(predicted_latents, 2)
                 predicted_latents = mint.lerp(
                     predicted_latents_uncond,
                     predicted_latents_text,

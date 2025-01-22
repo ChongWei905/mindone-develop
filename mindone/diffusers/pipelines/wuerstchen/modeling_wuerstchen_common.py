@@ -23,7 +23,7 @@ class TimestepBlock(nn.Cell):
         self.mapper = mint.nn.Linear(c_timestep, c * 2)
 
     def construct(self, x, t):
-        a, b = self.mapper(t)[:, :, None, None].chunk(2, axis=1)
+        a, b = mint.chunk(self.mapper(t)[:, :, None, None], 2, 1)
         return x * (1 + a) + b
 
 

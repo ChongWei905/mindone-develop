@@ -456,7 +456,7 @@ class LatentConsistencyModelImg2ImgPipeline(
             image_embeds = []
             for single_image_embeds in ip_adapter_image_embeds:
                 if do_classifier_free_guidance:
-                    single_negative_image_embeds, single_image_embeds = single_image_embeds.chunk(2)
+                    single_negative_image_embeds, single_image_embeds = mint.chunk(single_image_embeds, 2)
                     single_image_embeds = single_image_embeds.tile(
                         num_images_per_prompt, *(repeat_dims * len(single_image_embeds.shape[1:]))
                     )

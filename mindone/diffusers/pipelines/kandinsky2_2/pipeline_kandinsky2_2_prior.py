@@ -479,7 +479,9 @@ class KandinskyV22PriorPipeline(DiffusionPipeline):
             )[0]
 
             if self.do_classifier_free_guidance:
-                predicted_image_embedding_uncond, predicted_image_embedding_text = predicted_image_embedding.chunk(2)
+                predicted_image_embedding_uncond, predicted_image_embedding_text = mint.chunk(
+                    predicted_image_embedding, 2
+                )
                 predicted_image_embedding = predicted_image_embedding_uncond + self.guidance_scale * (
                     predicted_image_embedding_text - predicted_image_embedding_uncond
                 )
@@ -518,7 +520,7 @@ class KandinskyV22PriorPipeline(DiffusionPipeline):
         if negative_prompt is None:
             zero_embeds = self.get_zero_embed(latents.shape[0])
         else:
-            image_embeddings, zero_embeds = image_embeddings.chunk(2)
+            image_embeddings, zero_embeds = mint.chunk(image_embeddings, 2)
 
         if output_type not in ["ms", "np"]:
             raise ValueError(f"Only the output types `pt` and `np` are supported not output_type={output_type}")

@@ -988,11 +988,11 @@ class StableDiffusionDiffEditPipeline(
         )[0]
 
         if do_classifier_free_guidance:
-            noise_pred_neg_src, noise_pred_source, noise_pred_uncond, noise_pred_target = noise_pred.chunk(4)
+            noise_pred_neg_src, noise_pred_source, noise_pred_uncond, noise_pred_target = mint.chunk(noise_pred, 4)
             noise_pred_source = noise_pred_neg_src + guidance_scale * (noise_pred_source - noise_pred_neg_src)
             noise_pred_target = noise_pred_uncond + guidance_scale * (noise_pred_target - noise_pred_uncond)
         else:
-            noise_pred_source, noise_pred_target = noise_pred.chunk(2)
+            noise_pred_source, noise_pred_target = mint.chunk(noise_pred, 2)
 
         # 8. Compute the mask from the absolute difference of predicted noise residuals
         # TODO: Consider smoothing mask guidance map
@@ -1179,7 +1179,7 @@ class StableDiffusionDiffEditPipeline(
 
                 # perform guidance
                 if do_classifier_free_guidance:
-                    noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
+                    noise_pred_uncond, noise_pred_text = mint.chunk(noise_pred, 2)
                     noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
 
                 # regularization of the noise prediction (not in original code or paper but borrowed from Pix2PixZero)
@@ -1421,7 +1421,7 @@ class StableDiffusionDiffEditPipeline(
 
                 # perform guidance
                 if do_classifier_free_guidance:
-                    noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
+                    noise_pred_uncond, noise_pred_text = mint.chunk(noise_pred, 2)
                     noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
 
                 # compute the previous noisy sample x_t -> x_t-1

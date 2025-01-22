@@ -987,8 +987,8 @@ class StableDiffusionGLIGENTextImagePipeline(DiffusionPipeline, StableDiffusionM
                 # perform guidance
                 if do_classifier_free_guidance:
                     # Using noise_pred_text from noise residual with grounded information and noise_pred_uncond from noise residual without grounded information
-                    _, noise_pred_text = noise_pred_with_grounding.chunk(2)
-                    noise_pred_uncond, _ = noise_pred_without_grounding.chunk(2)
+                    _, noise_pred_text = mint.chunk(noise_pred_with_grounding, 2)
+                    noise_pred_uncond, _ = mint.chunk(noise_pred_without_grounding, 2)
                     noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
                 else:
                     noise_pred = noise_pred_with_grounding

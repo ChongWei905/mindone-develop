@@ -419,7 +419,7 @@ class StableDiffusionInstructPix2PixPipeline(
 
                 # perform guidance
                 if self.do_classifier_free_guidance:
-                    noise_pred_text, noise_pred_image, noise_pred_uncond = noise_pred.chunk(3)
+                    noise_pred_text, noise_pred_image, noise_pred_uncond = mint.chunk(noise_pred, 3)
                     noise_pred = (
                         noise_pred_uncond
                         + self.guidance_scale * (noise_pred_text - noise_pred_image)
@@ -676,7 +676,7 @@ class StableDiffusionInstructPix2PixPipeline(
                         single_image_embeds,
                         single_negative_image_embeds,
                         single_negative_image_embeds,
-                    ) = single_image_embeds.chunk(3)
+                    ) = mint.chunk(single_image_embeds, 3)
                     single_image_embeds = single_image_embeds.repeat(
                         num_images_per_prompt, *(repeat_dims * len(single_image_embeds.shape[1:]))
                     )

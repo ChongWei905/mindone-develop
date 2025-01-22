@@ -477,7 +477,7 @@ class StableDiffusionControlNetPAGPipeline(
         else:
             for single_image_embeds in ip_adapter_image_embeds:
                 if do_classifier_free_guidance:
-                    single_negative_image_embeds, single_image_embeds = single_image_embeds.chunk(2)
+                    single_negative_image_embeds, single_image_embeds = mint.chunk(single_image_embeds, 2)
                     negative_image_embeds.append(single_negative_image_embeds)
                 image_embeds.append(single_image_embeds)
 
@@ -1118,7 +1118,7 @@ class StableDiffusionControlNetPAGPipeline(
             for i, image_embeds in enumerate(ip_adapter_image_embeds):
                 negative_image_embeds = None
                 if self.do_classifier_free_guidance:
-                    negative_image_embeds, image_embeds = image_embeds.chunk(2)
+                    negative_image_embeds, image_embeds = mint.chunk(image_embeds, 2)
 
                 if self.do_perturbed_attention_guidance:
                     image_embeds = self._prepare_perturbed_attention_guidance(
@@ -1148,7 +1148,7 @@ class StableDiffusionControlNetPAGPipeline(
         images = image if isinstance(image, list) else [image]
         for i, single_image in enumerate(images):
             if self.do_classifier_free_guidance:
-                single_image = single_image.chunk(2)[0]
+                single_image = mint.chunk(single_image, 2)[0]
 
             if self.do_perturbed_attention_guidance:
                 single_image = self._prepare_perturbed_attention_guidance(
@@ -1223,7 +1223,7 @@ class StableDiffusionControlNetPAGPipeline(
                         noise_pred, self.do_classifier_free_guidance, self.guidance_scale, t
                     )
                 elif self.do_classifier_free_guidance:
-                    noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
+                    noise_pred_uncond, noise_pred_text = mint.chunk(noise_pred, 2)
                     noise_pred = noise_pred_uncond + self.guidance_scale * (noise_pred_text - noise_pred_uncond)
 
                 # compute the previous noisy sample x_t -> x_t-1

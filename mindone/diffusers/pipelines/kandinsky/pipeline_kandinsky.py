@@ -349,8 +349,8 @@ class KandinskyPipeline(DiffusionPipeline):
 
             if do_classifier_free_guidance:
                 noise_pred, variance_pred = mint.split(noise_pred, latents.shape[1], dim=1)
-                noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
-                _, variance_pred_text = variance_pred.chunk(2)
+                noise_pred_uncond, noise_pred_text = mint.chunk(noise_pred, 2)
+                _, variance_pred_text = mint.chunk(variance_pred, 2)
                 noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
                 noise_pred = mint.cat([noise_pred, variance_pred_text], dim=1)
 

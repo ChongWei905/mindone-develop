@@ -321,7 +321,9 @@ class UnCLIPPipeline(DiffusionPipeline):
             )[0]
 
             if do_classifier_free_guidance:
-                predicted_image_embedding_uncond, predicted_image_embedding_text = predicted_image_embedding.chunk(2)
+                predicted_image_embedding_uncond, predicted_image_embedding_text = mint.chunk(
+                    predicted_image_embedding, 2
+                )
                 predicted_image_embedding = predicted_image_embedding_uncond + prior_guidance_scale * (
                     predicted_image_embedding_text - predicted_image_embedding_uncond
                 )
@@ -384,7 +386,7 @@ class UnCLIPPipeline(DiffusionPipeline):
             )[0]
 
             if do_classifier_free_guidance:
-                noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
+                noise_pred_uncond, noise_pred_text = mint.chunk(noise_pred, 2)
                 noise_pred_uncond, _ = noise_pred_uncond.split(latent_model_input.shape[1], axis=1)
                 noise_pred_text, predicted_variance = noise_pred_text.split(latent_model_input.shape[1], axis=1)
                 noise_pred = noise_pred_uncond + decoder_guidance_scale * (noise_pred_text - noise_pred_uncond)

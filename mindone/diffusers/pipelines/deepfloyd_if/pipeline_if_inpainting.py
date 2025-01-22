@@ -663,7 +663,7 @@ class IFInpaintingPipeline(DiffusionPipeline, LoraLoaderMixin):
 
             if mask_image.ndim == 2:
                 # Batch and add channel dim for single mask
-                mask_image = mask_image.unsqueeze(0).unsqueeze(0)
+                mask_image = mint.unsqueeze(mint.unsqueeze(mask_image, 0), 0)
             elif mask_image.ndim == 3 and mask_image.shape[0] == 1:
                 # Single mask, the 0'th dimension is considered to be
                 # the existing batch size of 1
@@ -952,7 +952,7 @@ class IFInpaintingPipeline(DiffusionPipeline, LoraLoaderMixin):
 
                 # perform guidance
                 if do_classifier_free_guidance:
-                    noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
+                    noise_pred_uncond, noise_pred_text = mint.chunk(noise_pred, 2)
                     noise_pred_uncond, _ = mint.split(noise_pred_uncond, model_input.shape[1], dim=1)
                     noise_pred_text, predicted_variance = mint.split(noise_pred_text, model_input.shape[1], dim=1)
                     noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)

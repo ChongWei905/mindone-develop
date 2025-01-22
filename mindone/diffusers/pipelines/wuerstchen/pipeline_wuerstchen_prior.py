@@ -464,7 +464,9 @@ class WuerstchenPriorPipeline(DiffusionPipeline, LoraLoaderMixin):
 
             # 8. Check for classifier free guidance and apply it
             if self.do_classifier_free_guidance:
-                predicted_image_embedding_text, predicted_image_embedding_uncond = predicted_image_embedding.chunk(2)
+                predicted_image_embedding_text, predicted_image_embedding_uncond = mint.chunk(
+                    predicted_image_embedding, 2
+                )
                 predicted_image_embedding = mint.lerp(
                     predicted_image_embedding_uncond,
                     predicted_image_embedding_text,

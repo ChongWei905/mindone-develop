@@ -864,7 +864,7 @@ class StableDiffusionXLInstructPix2PixPipeline(
 
                 # perform guidance
                 if do_classifier_free_guidance:
-                    noise_pred_text, noise_pred_image, noise_pred_uncond = noise_pred.chunk(3)
+                    noise_pred_text, noise_pred_image, noise_pred_uncond = mint.chunk(noise_pred, 3)
                     noise_pred = (
                         noise_pred_uncond
                         + guidance_scale * (noise_pred_text - noise_pred_image)

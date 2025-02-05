@@ -476,7 +476,7 @@ class LDMBertAttention(nn.Cell):
 
         # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
         # partitioned across GPUs when using tensor-parallelism.
-        attn_output = attn_output.reshape(bsz, tgt_len, self.inner_dim)
+        attn_output = mint.reshape(attn_output, (bsz, tgt_len, self.inner_dim))
 
         attn_output = self.out_proj(attn_output)
 

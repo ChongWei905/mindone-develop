@@ -996,10 +996,12 @@ class StableDiffusionDiffEditPipeline(
 
         # 8. Compute the mask from the absolute difference of predicted noise residuals
         # TODO: Consider smoothing mask guidance map
-        mask_guidance_map = (
-            mint.abs(noise_pred_target - noise_pred_source)
-            .reshape(batch_size, num_maps_per_mask, *noise_pred_target.shape[-3:])
-            .mean([1, 2])
+        mask_guidance_map = mint.mean(
+            mint.reshape(
+                mint.abs(noise_pred_target - noise_pred_source),
+                (batch_size, num_maps_per_mask, *noise_pred_target.shape[-3:]),
+            ),
+            [1, 2],
         )
         clamp_magnitude = mask_guidance_map.mean() * mask_thresholding_ratio
         semantic_mask_image = mask_guidance_map.clamp(ms.Tensor(0), clamp_magnitude) / clamp_magnitude
@@ -1387,7 +1389,7 @@ class StableDiffusionDiffEditPipeline(
                 f"but has shape {image_latents.shape[-3:]}"
             )
         if image_latents.ndim == 4:
-            image_latents = image_latents.reshape(batch_size, len(timesteps), *latent_shape)
+            image_latents = mint.reshape(image_latents, (batch_size, len(timesteps), *latent_shape))
         if image_latents.shape[:2] != (batch_size, len(timesteps)):
             raise ValueError(
                 f"`image_latents` must have batch size {batch_size} with latent images from {len(timesteps)}"

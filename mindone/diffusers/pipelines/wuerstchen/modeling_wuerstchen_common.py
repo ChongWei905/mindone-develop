@@ -77,6 +77,6 @@ class AttnBlock(nn.Cell):
         norm_x = self.norm(x)
         if self.self_attn:
             batch_size, channel, _, _ = x.shape
-            kv = mint.cat([norm_x.view(batch_size, channel, -1).transpose(0, 2, 1), kv], dim=1)
+            kv = mint.cat([mint.transpose(norm_x.view(batch_size, channel, -1), 1, 2), kv], dim=1)
         x = x + self.attention(norm_x, encoder_hidden_states=kv)
         return x

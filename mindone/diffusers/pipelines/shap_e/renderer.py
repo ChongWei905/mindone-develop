@@ -87,7 +87,7 @@ def posenc_nerf(x: ms.Tensor, min_deg: int = 0, max_deg: int = 15) -> ms.Tensor:
 
     scales = 2.0 ** mint.arange(min_deg, max_deg, dtype=x.dtype)
     *shape, dim = x.shape
-    xb = (x.reshape(-1, 1, dim) * scales.view(1, -1, 1)).reshape(*shape, -1)
+    xb = mint.reshape(mint.reshape(x, (-1, 1, dim)) * scales.view(1, -1, 1), (*shape, -1))
     assert xb.shape[-1] == dim * (max_deg - min_deg)
     emb = mint.cat([xb, xb + math.pi / 2.0], dim=-1).sin()
     return mint.cat([x, emb], dim=-1)
@@ -561,9 +561,9 @@ class MeshDecoder(nn.Cell):
         # done later based on the used edge midpoints).
         edge_midpoints = mint.cat(
             [
-                ((corner_coords[:-1] + corner_coords[1:]) / 2).reshape(-1, 3),
-                ((corner_coords[:, :-1] + corner_coords[:, 1:]) / 2).reshape(-1, 3),
-                ((corner_coords[:, :, :-1] + corner_coords[:, :, 1:]) / 2).reshape(-1, 3),
+                mint.reshape(((corner_coords[:-1] + corner_coords[1:]) / 2), (-1, 3)),
+                mint.reshape(((corner_coords[:, :-1] + corner_coords[:, 1:]) / 2), (-1, 3)),
+                mint.reshape(((corner_coords[:, :, :-1] + corner_coords[:, :, 1:]) / 2), (-1, 3)),
             ],
             dim=0,
         )
@@ -573,21 +573,23 @@ class MeshDecoder(nn.Cell):
         cube_indices[:, :, :, 0] += mint.arange(grid_size[0] - 1)[:, None, None]
         cube_indices[:, :, :, 1] += mint.arange(grid_size[1] - 1)[None, :, None]
         cube_indices[:, :, :, 2] += mint.arange(grid_size[2] - 1)[None, None, :]
-        flat_cube_indices = cube_indices.reshape(-1, 3)
+        flat_cube_indices = mint.reshape(cube_indices, (-1, 3))
 
         # Create a flat array mapping each cube to 12 global edge indices.
         edge_indices = _create_flat_edge_indices(flat_cube_indices, grid_size)
 
         # Apply the LUT to figure out the triangles.
-        flat_bitmasks = bitmasks.reshape(-1).long()  # must cast to long for indexing to believe this not a mask
+        flat_bitmasks = mint.reshape(
+            bitmasks, (-1,)
+        ).long()  # must cast to long for indexing to believe this not a mask
         local_tris = cases[flat_bitmasks]
         local_masks = masks.long()[flat_bitmasks].bool()  # bool tensor couldn't sliced like this
         # Compute the global edge indices for the triangles.
-        global_tris = mint.gather(edge_indices, 1, local_tris.reshape(local_tris.shape[0], -1)).reshape(
-            local_tris.shape
+        global_tris = mint.reshape(
+            mint.gather(edge_indices, 1, mint.reshape(local_tris, (local_tris.shape[0], -1))), local_tris.shape
         )
         # Select the used triangles for each cube.
-        selected_tris = global_tris.reshape(-1, 3)[local_masks.reshape(-1)]
+        selected_tris = mint.reshape(global_tris, (-1, 3))[mint.reshape(local_masks, (-1,))]
 
         # Now we have a bunch of indices into the full list of possible vertices,
         # but we want to reduce this list to only the used vertices.
@@ -597,7 +599,7 @@ class MeshDecoder(nn.Cell):
         old_index_to_new_index[used_vertex_indices] = mint.arange(len(used_vertex_indices), dtype=ms.int64)
 
         # Rewrite the triangles to use the new indices
-        faces = mint.gather(old_index_to_new_index, 0, selected_tris.view(-1)).reshape(selected_tris.shape)
+        faces = mint.reshape(mint.gather(old_index_to_new_index, 0, selected_tris.view(-1)), selected_tris.shape)
 
         # Compute the actual interpolated coordinates corresponding to edge midpoints.
         v1 = mint.floor(used_edge_midpoints).to(ms.int64)
@@ -794,7 +796,7 @@ class ShapEParamsProjModel(ModelMixin, ConfigMixin):
             vectors, _ = shape
             end = start + vectors
             x_bvd = x[:, start:end]
-            out[k] = self.projections[_sanitize_name(k)](x_bvd).reshape(len(x), *shape)
+            out[k] = mint.reshape(self.projections[_sanitize_name(k)](x_bvd), (len(x), *shape))
             start = end
         return out
 
@@ -1001,7 +1003,7 @@ class ShapERenderer(ModelMixin, ConfigMixin):
             len(fields.shape) == 3 and fields.shape[-1] == 1
         ), f"expected [meta_batch x inner_batch] SDF results, but got {fields.shape}"
 
-        fields = fields.reshape(1, *([grid_size] * 3))
+        fields = mint.reshape(fields, (1, *([grid_size] * 3)))
 
         # create grid 128 x 128 x 128
         # - force a negative border around the SDFs to close off all the models.

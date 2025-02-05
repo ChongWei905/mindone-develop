@@ -517,7 +517,7 @@ class MarigoldNormalsPipeline(DiffusionPipeline):
         # uncertainty maps.
         uncertainty = None
         if ensemble_size > 1:
-            prediction = prediction.reshape(num_images, ensemble_size, *prediction.shape[1:])  # [N,E,3,PH,PW]
+            prediction = mint.reshape(prediction, (num_images, ensemble_size, *prediction.shape[1:]))  # [N,E,3,PH,PW]
             prediction = [
                 self.ensemble_normals(prediction[i], output_uncertainty, **(ensembling_kwargs or {}))
                 for i in range(num_images)

@@ -163,7 +163,7 @@ class DiTPipeline(DiffusionPipeline):
         )
         latent_model_input = mint.cat([latents] * 2) if guidance_scale > 1 else latents
 
-        class_labels = ms.Tensor(class_labels).reshape(-1)
+        class_labels = mint.reshape(ms.Tensor(class_labels), (-1,))
         class_null = ms.Tensor([1000] * batch_size)
         class_labels_input = mint.cat([class_labels, class_null], 0) if guidance_scale > 1 else class_labels
 

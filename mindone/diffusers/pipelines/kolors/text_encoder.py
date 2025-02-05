@@ -153,8 +153,8 @@ class CoreAttention(nn.Cell):
         # Raw attention scores. [b * np, sq, sk]
         matmul_result = mint.baddbmm(
             matmul_input_buffer,
-            query_layer.transpose(0, 1),  # [b * np, sq, hn]
-            key_layer.transpose(0, 1).transpose(1, 2),  # [b * np, hn, sk]
+            mint.transpose(query_layer, 0, 1),  # [b * np, sq, hn]
+            mint.transpose(mint.transpose(key_layer, 0, 1), 1, 2),  # [b * np, hn, sk]
             beta=0.0,
             alpha=(1.0 / self.norm_factor),
         )
@@ -246,7 +246,7 @@ def apply_rotary_pos_emb(x: ms.Tensor, rope_cache: ms.Tensor) -> ms.Tensor:
     x, x_pass = x[..., :rot_dim], x[..., rot_dim:]
     # truncate to support variable sizes
     rope_cache = rope_cache[:sq]
-    xshaped = x.reshape(sq, -1, np, rot_dim // 2, 2)
+    xshaped = mint.reshape(x, (sq, -1, np, rot_dim // 2, 2))
     rope_cache = rope_cache.view(sq, -1, 1, xshaped.shape[3], 2)
     x_out2 = mint.stack(
         [

@@ -711,14 +711,14 @@ class Attention(nn.Cell):
 
         if has_extra_dims:
             origin_query_shape = query.shape
-            query = query.reshape(-1, query.shape[-2], query.shape[-1])
-            key = key.reshape(-1, key.shape[-2], key.shape[-1])
-            value = value.reshape(-1, value.shape[-2], value.shape[-1])
+            query = mint.reshape(query, (-1, query.shape[-2], query.shape[-1]))
+            key = mint.reshape(key, (-1, key.shape[-2], key.shape[-1]))
+            value = mint.reshape(value, (-1, value.shape[-2], value.shape[-1]))
 
             attention_probs = self.get_attention_scores(query, key, attn_mask)
             hidden_states = mint.bmm(attention_probs, value)
 
-            hidden_states = hidden_states.reshape(*origin_query_shape)
+            hidden_states = mint.reshape(hidden_states, origin_query_shape)
         else:
             attention_probs = self.get_attention_scores(query, key, attn_mask)
             hidden_states = mint.bmm(attention_probs, value)

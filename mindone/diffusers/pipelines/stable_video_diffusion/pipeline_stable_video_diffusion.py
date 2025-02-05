@@ -661,7 +661,7 @@ def _filter2d(input, kernel):
     input = mint.nn.functional.pad(input, padding_shape, mode="reflect")
 
     # kernel and input tensor reshape to align element-wise or batch-wise params
-    tmp_kernel = tmp_kernel.reshape(-1, 1, height, width)
+    tmp_kernel = mint.reshape(tmp_kernel, (-1, 1, height, width))
     input = input.view(-1, tmp_kernel.shape[0], input.shape[-2], input.shape[-1])
 
     # convolve the tensor with the kernel.

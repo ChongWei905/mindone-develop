@@ -541,7 +541,7 @@ class MarigoldDepthPipeline(DiffusionPipeline):
         # uncertainty maps.
         uncertainty = None
         if ensemble_size > 1:
-            prediction = prediction.reshape(num_images, ensemble_size, *prediction.shape[1:])  # [N,E,1,PH,PW]
+            prediction = mint.reshape(prediction, (num_images, ensemble_size, *prediction.shape[1:]))  # [N,E,1,PH,PW]
             prediction = [
                 self.ensemble_depth(
                     prediction[i],

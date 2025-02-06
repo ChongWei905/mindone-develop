@@ -552,7 +552,7 @@ class MarigoldImageProcessor(ConfigMixin):
             prefix = "Uncertainty" + (f"[{idx}]" if idx else "")
             if img.min() < 0:
                 raise ValueError(f"{prefix}: unexected data range, min={img.min()}.")
-            img = img.squeeze(0).numpy()
+            img = mint.squeeze(img, 0).numpy()
             saturation_value = np.percentile(img, saturation_percentile)
             img = np.clip(img * 255 / saturation_value, 0, 255)
             img = img.astype(np.uint8)

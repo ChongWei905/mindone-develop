@@ -937,7 +937,7 @@ class ShapERenderer(ModelMixin, ConfigMixin):
             # e.g. 'mlp.mlp.0.weight' --> 'mlp.0.weight'
             name = name[4:]
             if f"nerstf.{name}" in projected_params.keys():
-                param.set_data(projected_params[f"nerstf.{name}"].squeeze(0))
+                param.set_data(mint.squeeze(projected_params[f"nerstf.{name}"], 0))
 
         # create cameras object
         camera = create_pan_cameras(size)
@@ -959,7 +959,7 @@ class ShapERenderer(ModelMixin, ConfigMixin):
             images.append(channels)
 
         images = mint.cat(images, dim=1)
-        images = images.view(*camera.shape, camera.height, camera.width, -1).squeeze(0)
+        images = mint.squeeze(images.view(*camera.shape, camera.height, camera.width, -1), 0)
 
         return images
 
@@ -979,7 +979,7 @@ class ShapERenderer(ModelMixin, ConfigMixin):
             # e.g. 'mlp.mlp.0.weight' --> 'mlp.0.weight'
             name = name[4:]
             if f"nerstf.{name}" in projected_params.keys():
-                param.set_data(projected_params[f"nerstf.{name}"].squeeze(0))
+                param.set_data(mint.squeeze(projected_params[f"nerstf.{name}"], 0))
 
         # 3. decoding with STF rendering
         # 3.1 query the SDF values at vertices along a regular 128**3 grid

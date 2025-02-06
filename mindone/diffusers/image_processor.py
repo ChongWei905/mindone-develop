@@ -752,9 +752,9 @@ class IPAdapterMaskProcessor(VaeImageProcessor):
         mask_h = int(mask_h) + int((num_queries % int(mask_h)) != 0)
         mask_w = num_queries // mask_h
 
-        mask_downsample = mint.nn.functional.interpolate(
-            mask.unsqueeze(0), size=(mask_h, mask_w), mode="bicubic"
-        ).squeeze(0)
+        mask_downsample = mint.squeeze(
+            mint.nn.functional.interpolate(mask.unsqueeze(0), size=(mask_h, mask_w), mode="bicubic"), 0
+        )
 
         # Repeat batch_size times
         if mask_downsample.shape[0] < batch_size:

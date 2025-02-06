@@ -96,7 +96,9 @@ def _conv_transpose1d(input, weight, bias=None, stride=1, padding=0, output_padd
         dilation=dilation,
         group=groups,
     )
-    outputs = op_conv_transpose2d(input, weight.to(input.dtype), (batch_size, out_channels, outH, outW)).squeeze(2)
+    outputs = mint.squeeze(
+        op_conv_transpose2d(input, weight.to(input.dtype), (batch_size, out_channels, outH, outW)), 2
+    )
 
     if bias is not None:
         assert isinstance(bias, ms.Tensor) and bias.ndim == 1

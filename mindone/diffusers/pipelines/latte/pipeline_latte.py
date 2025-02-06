@@ -319,7 +319,7 @@ class LattePipeline(DiffusionPipeline):
         if mask_feature and not embeds_initially_provided:
             prompt_embeds = prompt_embeds.unsqueeze(1)
             masked_prompt_embeds, keep_indices = self.mask_text_embeddings(prompt_embeds, prompt_embeds_attention_mask)
-            masked_prompt_embeds = masked_prompt_embeds.squeeze(1)
+            masked_prompt_embeds = mint.squeeze(masked_prompt_embeds, 1)
             masked_negative_prompt_embeds = (
                 negative_prompt_embeds[:, :keep_indices, :] if negative_prompt_embeds is not None else None
             )

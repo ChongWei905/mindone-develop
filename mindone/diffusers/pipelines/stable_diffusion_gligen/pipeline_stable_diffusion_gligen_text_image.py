@@ -584,7 +584,7 @@ class StableDiffusionGLIGENTextImagePipeline(DiffusionPipeline, StableDiffusionM
 
             outputs = self.image_encoder(**inputs)
             feature = outputs[0]
-            feature = self.image_project(feature).squeeze(0)
+            feature = mint.squeeze(self.image_project(feature), 0)
             feature = (feature / feature.norm()) * normalize_constant
             feature = feature.unsqueeze(0)
         else:

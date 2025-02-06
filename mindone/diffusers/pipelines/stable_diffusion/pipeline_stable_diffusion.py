@@ -20,7 +20,7 @@ from packaging import version
 from transformers import CLIPImageProcessor, CLIPTokenizer
 
 import mindspore as ms
-from mindspore import ops
+from mindspore import mint, ops
 
 from mindone.transformers import CLIPTextModel, CLIPVisionModelWithProjection
 
@@ -288,7 +288,7 @@ class StableDiffusionPipeline(
         )
 
         # concatenate for backwards comp
-        prompt_embeds = ops.cat([prompt_embeds_tuple[1], prompt_embeds_tuple[0]])
+        prompt_embeds = mint.cat([prompt_embeds_tuple[1], prompt_embeds_tuple[0]])
 
         return prompt_embeds
 
@@ -477,7 +477,9 @@ class StableDiffusionPipeline(
         if output_hidden_states:
             image_enc_hidden_states = self.image_encoder(image, output_hidden_states=True)[2][-2]
             image_enc_hidden_states = image_enc_hidden_states.repeat_interleave(num_images_per_prompt, dim=0)
-            uncond_image_enc_hidden_states = self.image_encoder(ops.zeros_like(image), output_hidden_states=True)[2][-2]
+            uncond_image_enc_hidden_states = self.image_encoder(mint.zeros_like(image), output_hidden_states=True)[2][
+                -2
+            ]
             uncond_image_enc_hidden_states = uncond_image_enc_hidden_states.repeat_interleave(
                 num_images_per_prompt, dim=0
             )
@@ -485,7 +487,7 @@ class StableDiffusionPipeline(
         else:
             image_embeds = self.image_encoder(image)[0]
             image_embeds = image_embeds.repeat_interleave(num_images_per_prompt, dim=0)
-            uncond_image_embeds = ops.zeros_like(image_embeds)
+            uncond_image_embeds = mint.zeros_like(image_embeds)
 
             return image_embeds, uncond_image_embeds
 
@@ -509,11 +511,11 @@ class StableDiffusionPipeline(
                 single_image_embeds, single_negative_image_embeds = self.encode_image(
                     single_ip_adapter_image, 1, output_hidden_state
                 )
-                single_image_embeds = ops.stack([single_image_embeds] * num_images_per_prompt, axis=0)
-                single_negative_image_embeds = ops.stack([single_negative_image_embeds] * num_images_per_prompt, axis=0)
+                single_image_embeds = mint.stack([single_image_embeds] * num_images_per_prompt, dim=0)
+                single_negative_image_embeds = mint.stack([single_negative_image_embeds] * num_images_per_prompt, dim=0)
 
                 if do_classifier_free_guidance:
-                    single_image_embeds = ops.cat([single_negative_image_embeds, single_image_embeds])
+                    single_image_embeds = mint.cat([single_negative_image_embeds, single_image_embeds])
 
                 image_embeds.append(single_image_embeds)
         else:
@@ -528,7 +530,7 @@ class StableDiffusionPipeline(
                     single_negative_image_embeds = single_negative_image_embeds.tile(
                         (num_images_per_prompt, *(repeat_dims * len(single_negative_image_embeds.shape[1:])))
                     )
-                    single_image_embeds = ops.cat([single_negative_image_embeds, single_image_embeds])
+                    single_image_embeds = mint.cat([single_negative_image_embeds, single_image_embeds])
                 else:
                     single_image_embeds = single_image_embeds.tile(
                         (num_images_per_prompt, *(repeat_dims * len(single_image_embeds.shape[1:])))
@@ -551,7 +553,7 @@ class StableDiffusionPipeline(
             )
 
             # Warning for safety checker operations here as it couldn't been done in construct()
-            if ops.any(has_nsfw_concept):
+            if mint.any(has_nsfw_concept):
                 logger.warning(
                     "Potential NSFW content was detected in one or more images. A black image will be returned instead."
                     " Try again with a different prompt and/or seed."
@@ -701,12 +703,12 @@ class StableDiffusionPipeline(
         w = w * 1000.0
 
         half_dim = embedding_dim // 2
-        emb = ops.log(ms.tensor(10000.0)) / (half_dim - 1)
-        emb = ops.exp(ops.arange(half_dim, dtype=dtype) * -emb)
+        emb = mint.log(ms.tensor(10000.0)) / (half_dim - 1)
+        emb = mint.exp(mint.arange(half_dim, dtype=dtype) * -emb)
         emb = w.to(dtype)[:, None] * emb[None, :]
-        emb = ops.cat([ops.sin(emb), ops.cos(emb)], axis=1)
+        emb = mint.cat([mint.sin(emb), mint.cos(emb)], dim=1)
         if embedding_dim % 2 == 1:  # zero pad
-            emb = ops.pad(emb, (0, 1))
+            emb = mint.nn.functional.pad(emb, (0, 1))
         assert emb.shape == (w.shape[0], embedding_dim)
         return emb
 
@@ -926,7 +928,7 @@ class StableDiffusionPipeline(
         # Here we concatenate the unconditional and text embeddings into a single batch
         # to avoid doing two forward passes
         if self.do_classifier_free_guidance:
-            prompt_embeds = ops.cat([negative_prompt_embeds, prompt_embeds])
+            prompt_embeds = mint.cat([negative_prompt_embeds, prompt_embeds])
 
         if ip_adapter_image is not None or ip_adapter_image_embeds is not None:
             image_embeds = self.prepare_ip_adapter_image_embeds(
@@ -985,7 +987,7 @@ class StableDiffusionPipeline(
                     continue
 
                 # expand the latents if we are doing classifier free guidance
-                latent_model_input = ops.cat([latents] * 2) if self.do_classifier_free_guidance else latents
+                latent_model_input = mint.cat([latents] * 2) if self.do_classifier_free_guidance else latents
                 # TODO: method of scheduler should not change the dtype of input.
                 #  Remove the casting after cuiyushi confirm that.
                 tmp_dtype = latent_model_input.dtype

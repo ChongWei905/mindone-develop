@@ -18,7 +18,7 @@ from typing import List, Optional, Tuple, Union
 import numpy as np
 
 import mindspore as ms
-from mindspore import ops
+from mindspore import mint
 
 from ..configuration_utils import ConfigMixin, register_to_config
 from .scheduling_utils import KarrasDiffusionSchedulers, SchedulerMixin, SchedulerOutput
@@ -142,7 +142,7 @@ class HeunDiscreteScheduler(SchedulerMixin, ConfigMixin):
             raise NotImplementedError(f"{beta_schedule} is not implemented for {self.__class__}")
 
         self.alphas = 1.0 - self.betas
-        self.alphas_cumprod = ops.cumprod(self.alphas, dim=0)
+        self.alphas_cumprod = mint.cumprod(self.alphas, dim=0)
 
         #  set all values
         self.set_timesteps(num_train_timesteps, num_train_timesteps)
@@ -292,10 +292,10 @@ class HeunDiscreteScheduler(SchedulerMixin, ConfigMixin):
 
         sigmas = np.concatenate([sigmas, [0.0]]).astype(np.float32)
         sigmas = ms.Tensor(sigmas)
-        self.sigmas = ops.cat([sigmas[:1], sigmas[1:-1].repeat_interleave(2), sigmas[-1:]])
+        self.sigmas = mint.cat([sigmas[:1], sigmas[1:-1].repeat_interleave(2), sigmas[-1:]])
 
         timesteps = ms.Tensor(timesteps)
-        timesteps = ops.cat([timesteps[:1], timesteps[1:].repeat_interleave(2)])
+        timesteps = mint.cat([timesteps[:1], timesteps[1:].repeat_interleave(2)])
 
         self.timesteps = timesteps
 
@@ -427,8 +427,8 @@ class HeunDiscreteScheduler(SchedulerMixin, ConfigMixin):
             )
 
         if self.config.clip_sample:
-            pred_original_sample = pred_original_sample.clamp(
-                -self.config.clip_sample_range, self.config.clip_sample_range
+            pred_original_sample = mint.clamp(
+                pred_original_sample, -self.config.clip_sample_range, self.config.clip_sample_range
             )
 
         if self.state_in_first_order:
@@ -488,10 +488,10 @@ class HeunDiscreteScheduler(SchedulerMixin, ConfigMixin):
             # add noise is called before first denoising step to create initial latent(img2img)
             step_indices = [self.begin_index] * timesteps.shape[0]
 
-        sigma = sigmas[step_indices].flatten()
+        sigma = mint.flatten(sigmas[step_indices])
         # while len(sigma.shape) < len(original_samples.shape):
         #     sigma = sigma.unsqueeze(-1)
-        sigma = ops.reshape(sigma, (timesteps.shape[0],) + (1,) * (len(broadcast_shape) - 1))
+        sigma = mint.reshape(sigma, (timesteps.shape[0],) + (1,) * (len(broadcast_shape) - 1))
 
         noisy_samples = original_samples + noise * sigma
         return noisy_samples

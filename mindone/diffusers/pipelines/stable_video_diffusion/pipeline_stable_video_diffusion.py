@@ -22,6 +22,7 @@ from transformers import CLIPImageProcessor
 
 import mindspore as ms
 from mindspore import mint
+from mindspore.common.api import _pynative_executor
 
 from mindone.transformers import CLIPVisionModelWithProjection
 
@@ -495,6 +496,7 @@ class StableVideoDiffusionPipeline(DiffusionPipeline):
         image_latents = image_latents.to(image_embeddings.dtype)
 
         # cast back to fp16 if needed
+        _pynative_executor.sync()
         if needs_upcasting:
             self.vae.to(dtype=ms.float16)
 

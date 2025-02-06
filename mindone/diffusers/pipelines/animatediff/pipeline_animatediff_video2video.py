@@ -20,6 +20,7 @@ from transformers import CLIPImageProcessor, CLIPTokenizer
 
 import mindspore as ms
 from mindspore import mint
+from mindspore.common.api import _pynative_executor
 
 from ....transformers import CLIPTextModel, CLIPVisionModelWithProjection
 from ...image_processor import PipelineImageInput
@@ -663,6 +664,7 @@ class AnimateDiffVideoToVideoPipeline(
 
             init_latents = mint.cat(init_latents, dim=0)
 
+            _pynative_executor.sync()
             # restore vae to original dtype
             if self.vae.config.force_upcast:
                 self.vae.to(dtype)

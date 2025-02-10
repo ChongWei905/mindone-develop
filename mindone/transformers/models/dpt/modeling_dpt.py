@@ -151,9 +151,9 @@ class DPTViTHybridEmbeddings(nn.Cell):
 
         old_grid_size = int(mint.sqrt(posemb_shape - start_index))
 
-        posemb_grid = posemb_grid.reshape(1, old_grid_size, old_grid_size, -1).permute(0, 3, 1, 2)
+        posemb_grid = mint.permute(mint.reshape(posemb_grid, (1, old_grid_size, old_grid_size, -1)), (0, 3, 1, 2))
         posemb_grid = ops.interpolate(posemb_grid, size=(grid_size_height, grid_size_width), mode="bilinear")
-        posemb_grid = posemb_grid.permute(0, 2, 3, 1).reshape(1, grid_size_height * grid_size_width, -1)
+        posemb_grid = mint.reshape(mint.permute(posemb_grid, (0, 2, 3, 1)), (1, grid_size_height * grid_size_width, -1))
 
         posemb = mint.cat([posemb_tok, posemb_grid], dim=1)
 
@@ -185,9 +185,9 @@ class DPTViTHybridEmbeddings(nn.Cell):
         # Retrieve also the intermediate activations to use them at later stages
         output_hidden_states = [backbone_output[0][index] for index in self.residual_feature_map_index]
 
-        embeddings = self.projection(features).flatten(start_dim=2).swapaxes(1, 2)
+        embeddings = mint.swapaxes(mint.flatten(self.projection(features), start_dim=2), 1, 2)
 
-        cls_tokens = self.cls_token.broadcast_to((batch_size, -1, -1))
+        cls_tokens = mint.broadcast_to(self.cls_token, (batch_size, -1, -1))
         embeddings = mint.cat((cls_tokens, embeddings), dim=1)
 
         # add positional encoding to each token
@@ -226,9 +226,9 @@ class DPTViTEmbeddings(nn.Cell):
 
         old_grid_size = int(posemb_grid.shape[0] ** 0.5)
 
-        posemb_grid = posemb_grid.reshape(1, old_grid_size, old_grid_size, -1).permute(0, 3, 1, 2)
+        posemb_grid = mint.permute(mint.reshape(posemb_grid, (1, old_grid_size, old_grid_size, -1)), (0, 3, 1, 2))
         posemb_grid = ops.interpolate(posemb_grid, size=(grid_size_height, grid_size_width), mode="bilinear")
-        posemb_grid = posemb_grid.permute(0, 2, 3, 1).reshape(1, grid_size_height * grid_size_width, -1)
+        posemb_grid = mint.reshape(mint.permute(posemb_grid, (0, 2, 3, 1)), (1, grid_size_height * grid_size_width, -1))
 
         posemb = mint.cat([posemb_tok, posemb_grid], dim=1)
 
@@ -248,7 +248,7 @@ class DPTViTEmbeddings(nn.Cell):
         batch_size, seq_len, _ = embeddings.shape
 
         # add the [CLS] token to the embedded patch tokens
-        cls_tokens = self.cls_token.broadcast_to((batch_size, -1, -1))
+        cls_tokens = mint.broadcast_to(self.cls_token, (batch_size, -1, -1))
         embeddings = mint.cat((cls_tokens, embeddings), dim=1)
 
         # add positional encoding to each token
@@ -291,7 +291,7 @@ class DPTViTPatchEmbeddings(nn.Cell):
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
             )
-        embeddings = self.projection(pixel_values).flatten(start_dim=2).swapaxes(1, 2)
+        embeddings = mint.swapaxes(mint.flatten(self.projection(pixel_values), start_dim=2), 1, 2)
         return embeddings
 
 
@@ -319,7 +319,7 @@ class DPTViTSelfAttention(nn.Cell):
     def transpose_for_scores(self, x: ms.Tensor) -> ms.Tensor:
         new_x_shape = x.shape[:-1] + (self.num_attention_heads, self.attention_head_size)
         x = x.view(new_x_shape)
-        return x.permute(0, 2, 1, 3)
+        return mint.permute(x, (0, 2, 1, 3))
 
     def construct(
         self, hidden_states, head_mask: Optional[ms.Tensor] = None, output_attentions: bool = False
@@ -331,7 +331,7 @@ class DPTViTSelfAttention(nn.Cell):
         query_layer = self.transpose_for_scores(mixed_query_layer)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = mint.matmul(query_layer, key_layer.swapaxes(-1, -2))
+        attention_scores = mint.matmul(query_layer, mint.swapaxes(key_layer, -1, -2))
 
         attention_scores = attention_scores / mint.sqrt(self.attention_head_size_tensor.to(attention_scores.dtype))
 
@@ -348,7 +348,7 @@ class DPTViTSelfAttention(nn.Cell):
 
         context_layer = mint.matmul(attention_probs, value_layer)
 
-        context_layer = context_layer.permute(0, 2, 1, 3)
+        context_layer = mint.permute(context_layer, (0, 2, 1, 3))
         new_context_layer_shape = context_layer.shape[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(new_context_layer_shape)
 
@@ -398,7 +398,7 @@ def find_pruneable_heads_and_indices(
         # Compute how many pruned heads are before the head and move the index accordingly
         head = head - sum(1 if h < head else 0 for h in already_pruned_heads)
         mask[head] = 0
-    mask = mask.view(-1).eq(1)
+    mask = mint.eq(mask.view(-1), 1)
     index: ms.Tensor = mint.arange(len(mask))[mask].long()
     return heads, index
 
@@ -418,12 +418,12 @@ def prune_linear_layer(layer: mint.nn.Linear, index: ms.Tensor, dim: int = 0) ->
     Returns:
         `torch.nn.Linear`: The pruned layer as a new layer with `requires_grad=True`.
     """
-    W = layer.weight.index_select(dim, index).clone().detach()
+    W = mint.clone(mint.index_select(layer.weight, dim, index)).detach()
     if layer.bias is not None:
         if dim == 1:
-            b = layer.bias.clone().detach()
+            b = mint.clone(layer.bias).detach()
         else:
-            b = layer.bias[index].clone().detach()
+            b = mint.clone(layer.bias[index]).detach()
     new_size = list(layer.weight.shape)
     new_size[dim] = len(index)
     new_layer = mint.nn.Linear(new_size[1], new_size[0], bias=layer.bias is not None)
@@ -688,24 +688,24 @@ class DPTReassembleStage(nn.Cell):
                 cls_token, hidden_state = hidden_state[:, 0], hidden_state[:, 1:]
                 batch_size, sequence_length, num_channels = hidden_state.shape
                 if patch_height is not None and patch_width is not None:
-                    hidden_state = hidden_state.reshape(batch_size, patch_height, patch_width, num_channels)
+                    hidden_state = mint.reshape(hidden_state, (batch_size, patch_height, patch_width, num_channels))
                 else:
                     size = int(math.sqrt(sequence_length))
-                    hidden_state = hidden_state.reshape(batch_size, size, size, num_channels)
-                hidden_state = hidden_state.permute(0, 3, 1, 2)
+                    hidden_state = mint.reshape(hidden_state, (batch_size, size, size, num_channels))
+                hidden_state = mint.permute(hidden_state, (0, 3, 1, 2))
 
                 feature_shape = hidden_state.shape
                 if self.readout_type == "project":
                     # reshape to (batch_size, height*width, num_channels)
-                    hidden_state = hidden_state.flatten(start_dim=2).permute((0, 2, 1))
-                    readout = cls_token.unsqueeze(1).expand_as(hidden_state)
+                    hidden_state = mint.permute(mint.flatten(hidden_state, start_dim=2), (0, 2, 1))
+                    readout = mint.unsqueeze(cls_token, 1).expand_as(hidden_state)
                     # concatenate the readout token to the hidden states and project
                     hidden_state = self.readout_projects[i](mint.cat((hidden_state, readout), -1))
                     # reshape back to (batch_size, num_channels, height, width)
-                    hidden_state = hidden_state.permute(0, 2, 1).reshape(feature_shape)
+                    hidden_state = mint.reshape(mint.permute(hidden_state, (0, 2, 1)), feature_shape)
                 elif self.readout_type == "add":
-                    hidden_state = hidden_state.flatten(start_dim=2) + cls_token.unsqueeze(-1)
-                    hidden_state = hidden_state.reshape(feature_shape)
+                    hidden_state = mint.flatten(hidden_state, start_dim=2) + mint.unsqueeze(cls_token, -1)
+                    hidden_state = mint.reshape(hidden_state, feature_shape)
                 hidden_state = self.layers[i](hidden_state)
             out.append(hidden_state)
 
@@ -1089,7 +1089,7 @@ class DPTDepthEstimationHead(nn.Cell):
 
         predicted_depth = self.head(hidden_states)
 
-        predicted_depth = predicted_depth.squeeze(axis=1)
+        predicted_depth = mint.squeeze(predicted_depth, dim=1)
 
         return predicted_depth
 

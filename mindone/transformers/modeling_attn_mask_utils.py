@@ -232,7 +232,7 @@ def _make_causal_mask(
         context_mask = 1 - ops.triu(mint.ones_like(mask, dtype=ms.int32), diagonal=diagonal)
         mask = mask.masked_fill(context_mask.bool(), dtype_to_min(dtype))
 
-    return mask[None, None, :, :].tile((bsz, 1, 1, 1))
+    return mint.tile(mask[None, None, :, :], (bsz, 1, 1, 1))
 
 
 def _expand_mask(mask: ms.Tensor, dtype: ms.Type, tgt_len: Optional[int] = None):
@@ -242,7 +242,7 @@ def _expand_mask(mask: ms.Tensor, dtype: ms.Type, tgt_len: Optional[int] = None)
     bsz, src_len = mask.shape
     tgt_len = tgt_len if tgt_len is not None else src_len
 
-    expanded_mask = mask[:, None, None, :].tile((1, 1, tgt_len, 1)).to(dtype)
+    expanded_mask = mint.tile(mask[:, None, None, :], (1, 1, tgt_len, 1)).to(dtype)
 
     inverted_mask = 1.0 - expanded_mask
 

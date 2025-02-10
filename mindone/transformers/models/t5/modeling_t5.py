@@ -68,7 +68,7 @@ class T5LayerNorm(nn.Cell):
         # w/o mean and there is no bias. Additionally we want to make sure that the accumulation for
         # half-precision inputs is done in fp32
 
-        variance = hidden_states.to(ms.float32).pow(2).mean(-1, keep_dims=True)
+        variance = mint.pow(hidden_states.to(ms.float32), 2).mean(-1, keep_dims=True)
         hidden_states = hidden_states * mint.rsqrt(variance + self.variance_epsilon)
 
         # convert into half-precision if necessary
@@ -250,7 +250,7 @@ class T5Attention(nn.Cell):
             max_distance=self.relative_attention_max_distance,
         )
         values = self.relative_attention_bias(relative_position_bucket)  # shape (query_length, key_length, num_heads)
-        values = values.permute([2, 0, 1]).unsqueeze(0)  # shape (1, num_heads, query_length, key_length)
+        values = mint.unsqueeze(mint.permute(values, (2, 0, 1)), 0)  # shape (1, num_heads, query_length, key_length)
         return values
 
     def construct(
@@ -286,11 +286,11 @@ class T5Attention(nn.Cell):
 
         def shape(states):
             """projection"""
-            return states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).swapaxes(1, 2)
+            return mint.swapaxes(states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim), 1, 2)
 
         def unshape(states):
             """reshape"""
-            return states.swapaxes(1, 2).view(batch_size, -1, self.inner_dim)
+            return mint.swapaxes(states, 1, 2).view(batch_size, -1, self.inner_dim)
 
         def project(hidden_states, proj_layer, key_value_states, past_key_value):
             """projects hidden states correctly to key/query states"""
@@ -332,7 +332,7 @@ class T5Attention(nn.Cell):
 
         # compute scores
         scores = mint.matmul(
-            query_states, key_states.swapaxes(3, 2)
+            query_states, mint.swapaxes(key_states, 3, 2)
         )  # equivalent of ops.einsum("bnqd,bnkd->bnqk", query_states, key_states), compatible with onnx op>9
 
         if position_bias is None:
@@ -507,7 +507,7 @@ class T5Block(nn.Cell):
         # clamp inf values to enable fp16 training
         if hidden_states.dtype == ms.float16:
             clamp_value = mint.where(
-                ops.isinf(hidden_states).any(),
+                mint.any(ops.isinf(hidden_states)),
                 Tensor([64504]),  # torch.finfo(torch.float16).max - 1000
                 Tensor([65504]),  # torch.finfo(torch.float16).max is 65504
             )
@@ -538,7 +538,7 @@ class T5Block(nn.Cell):
             # clamp inf values to enable fp16 training
             if hidden_states.dtype == ms.float16:
                 clamp_value = mint.where(
-                    ops.isinf(hidden_states).any(),
+                    mint.any(ops.isinf(hidden_states)),
                     Tensor([64504]),  # torch.finfo(torch.float16).max - 1000
                     Tensor([65504]),  # torch.finfo(torch.float16).max is 65504
                 )
@@ -557,7 +557,7 @@ class T5Block(nn.Cell):
         # clamp inf values to enable fp16 training
         if hidden_states.dtype == ms.float16:
             clamp_value = mint.where(
-                ops.isinf(hidden_states).any(),
+                mint.any(ops.isinf(hidden_states)),
                 Tensor([64504]),
                 Tensor([65504]),
             )

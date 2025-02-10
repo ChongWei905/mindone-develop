@@ -38,12 +38,12 @@ def prune_linear_layer(layer: mint.nn.Linear, index: ms.Tensor, dim: int = 0) ->
     Returns:
         `mindspore.mint.nn.Linear`: The pruned layer as a new layer with `requires_grad=True`.
     """
-    w = layer.weight.index_select(dim, index).clone()
+    w = mint.clone(mint.index_select(layer.weight, dim, index))
     if layer.bias is not None:
         if dim == 1:
-            b = layer.bias.clone()
+            b = mint.clone(layer.bias)
         else:
-            b = layer.bias[index].clone()
+            b = mint.clone(layer.bias[index])
     new_size = list(layer.weight.shape)
     new_size[dim] = len(index)
     new_layer = mint.nn.Linear(new_size[1], new_size[0], bias=layer.bias is not None)
@@ -96,11 +96,11 @@ def prune_conv1d_layer(layer: Conv1D, index: ms.Tensor, dim: int = 1) -> Conv1D:
     Returns:
         [`~pytorch_utils.Conv1D`]: The pruned layer as a new layer with `requires_grad=True`.
     """
-    w = layer.weight.index_select(dim, index).clone()
+    w = mint.clone(mint.index_select(layer.weight, dim, index))
     if dim == 0:
-        b = layer.bias.clone()
+        b = mint.clone(layer.bias)
     else:
-        b = layer.bias[index].clone()
+        b = mint.clone(layer.bias[index])
     new_size = list(layer.weight.shape)
     new_size[dim] = len(index)
     new_layer = Conv1D(new_size[1], new_size[0])
@@ -157,6 +157,6 @@ def find_pruneable_heads_and_indices(
         # Compute how many pruned heads are before the head and move the index accordingly
         head = head - sum(1 if h < head else 0 for h in already_pruned_heads)
         mask[head] = 0
-    mask = mask.view(-1).eq(1)
+    mask = mint.eq(mask.view(-1), 1)
     index = mint.arange(len(mask))[mask].long()
     return heads, index

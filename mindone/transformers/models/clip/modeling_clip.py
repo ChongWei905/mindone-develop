@@ -171,15 +171,15 @@ class CLIPVisionEmbeddings(nn.Cell):
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches + 1
         self.position_embedding = mint.nn.Embedding(self.num_positions, self.embed_dim)
-        self.position_ids = mint.arange(self.num_positions).unsqueeze(0)
+        self.position_ids = mint.unsqueeze(mint.arange(self.num_positions), 0)
 
     def construct(self, pixel_values: ms.Tensor) -> ms.Tensor:
         batch_size = pixel_values.shape[0]
         target_dtype = self.patch_embedding.weight.dtype
         patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
-        patch_embeds = patch_embeds.flatten(start_dim=2).swapaxes(1, 2)
+        patch_embeds = mint.swapaxes(mint.flatten(patch_embeds, start_dim=2), 1, 2)
 
-        class_embeds = self.class_embedding.reshape((1, 1, -1)).tile((batch_size, 1, 1))
+        class_embeds = mint.tile(mint.reshape(self.class_embedding, (1, 1, -1)), (batch_size, 1, 1))
         embeddings = mint.cat([class_embeds, patch_embeds], dim=1)
         embeddings = embeddings + self.position_embedding(self.position_ids)
         return embeddings
@@ -194,7 +194,7 @@ class CLIPTextEmbeddings(nn.Cell):
         self.position_embedding = mint.nn.Embedding(config.max_position_embeddings, embed_dim)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.position_ids = mint.arange(config.max_position_embeddings).unsqueeze(0)
+        self.position_ids = mint.unsqueeze(mint.arange(config.max_position_embeddings), 0)
 
     def construct(
         self,
@@ -239,7 +239,7 @@ class CLIPAttention(nn.Cell):
         self.out_proj = mint.nn.Linear(self.embed_dim, self.embed_dim)
 
     def _shape(self, tensor: ms.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).swapaxes(1, 2)
+        return mint.swapaxes(tensor.view(bsz, seq_len, self.num_heads, self.head_dim), 1, 2)
 
     def construct(
         self,
@@ -263,7 +263,7 @@ class CLIPAttention(nn.Cell):
         value_states = value_states.view(proj_shape)
 
         src_len = key_states.shape[1]
-        attn_weights = ops.bmm(query_states, key_states.swapaxes(1, 2))
+        attn_weights = ops.bmm(query_states, mint.swapaxes(key_states, 1, 2))
 
         if attn_weights.shape != (bsz * self.num_heads, tgt_len, src_len):
             raise ValueError(
@@ -315,8 +315,8 @@ class CLIPAttention(nn.Cell):
             )
 
         attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
-        attn_output = attn_output.swapaxes(1, 2)
-        attn_output = attn_output.reshape(bsz, tgt_len, embed_dim)
+        attn_output = mint.swapaxes(attn_output, 1, 2)
+        attn_output = mint.reshape(attn_output, (bsz, tgt_len, embed_dim))
 
         attn_output = self.out_proj(attn_output)
 
@@ -558,14 +558,14 @@ class CLIPTextTransformer(nn.Cell):
             # casting to torch.int for onnx compatibility: argmax doesn't support int64 inputs with opset 14
             pooled_output = last_hidden_state[
                 mint.arange(last_hidden_state.shape[0]),
-                input_ids.to(dtype=ms.int32).argmax(axis=-1),
+                mint.argmax(input_ids.to(dtype=ms.int32), dim=-1),
             ]
         else:
             # The config gets updated `eos_token_id` from PR #24773 (so the use of exta new tokens is possible)
             pooled_output = last_hidden_state[
                 mint.arange(last_hidden_state.shape[0]),
                 # We need to get the first position of `eos_token_id` value (`pad_token_ids` might equal to `eos_token_id`)
-                (input_ids.to(dtype=ms.int32) == self.eos_token_id).int().argmax(axis=-1),
+                mint.argmax((input_ids.to(dtype=ms.int32) == self.eos_token_id).int(), dim=-1),
             ]
 
         if not return_dict:
@@ -944,7 +944,7 @@ class CLIPModel(CLIPPreTrainedModel):
         text_embeds = text_embeds / text_embeds.norm(ord=2, dim=-1, keepdim=True)
 
         # cosine similarity as logits
-        logit_scale = self.logit_scale.exp()
+        logit_scale = mint.exp(self.logit_scale)
         logits_per_text = mint.matmul(text_embeds, image_embeds.t()) * logit_scale
         logits_per_image = logits_per_text.t()
 

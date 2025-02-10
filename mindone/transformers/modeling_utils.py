@@ -375,7 +375,7 @@ class ModuleUtilsMixin:
     def create_extended_attention_mask_for_decoder(input_shape, attention_mask):
         batch_size, seq_length = input_shape
         seq_ids = mint.arange(seq_length)
-        causal_mask = seq_ids[None, None, :].tile((batch_size, seq_length, 1)) <= seq_ids[None, :, None]
+        causal_mask = mint.tile(seq_ids[None, None, :], (batch_size, seq_length, 1)) <= seq_ids[None, :, None]
         causal_mask = causal_mask.to(attention_mask.dtype)
 
         if causal_mask.shape[1] < attention_mask.shape[1]:
@@ -389,7 +389,7 @@ class ModuleUtilsMixin:
             )
 
         # extended_attention_mask = causal_mask[:, None, :, :] * attention_mask[:, None, None, :]
-        extended_attention_mask = mint.mul(causal_mask.unsqueeze(1), attention_mask.unsqueeze(1).unsqueeze(1))
+        extended_attention_mask = mint.mul(mint.unsqueeze(causal_mask, 1), attention_mask.unsqueeze(1).unsqueeze(1))
         return extended_attention_mask
 
     def get_extended_attention_mask(
@@ -459,7 +459,7 @@ class ModuleUtilsMixin:
         if head_mask is not None:
             head_mask = self._convert_head_mask_to_5d(head_mask, num_hidden_layers)
             if is_attention_chunked is True:
-                head_mask = head_mask.unsqueeze(-1)
+                head_mask = mint.unsqueeze(head_mask, -1)
         else:
             head_mask = [None] * num_hidden_layers
 
@@ -469,7 +469,7 @@ class ModuleUtilsMixin:
         """-> [num_hidden_layers x batch x num_heads x seq_length x seq_length]"""
         if head_mask.dim() == 1:
             head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
-            head_mask = head_mask.tile((num_hidden_layers, 1, 1, 1, 1))
+            head_mask = mint.tile(head_mask, (num_hidden_layers, 1, 1, 1, 1))
         elif head_mask.dim() == 2:
             head_mask = head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)  # We can specify head_mask for each layer
         assert head_mask.dim() == 5, f"head_mask.dim != 5, instead {head_mask.dim()}"
@@ -821,7 +821,7 @@ class MSPreTrainedModel(nn.Cell, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             return old_lm_head
 
         old_num_tokens, old_lm_head_dim = (
-            old_lm_head.weight.shape if not transposed else old_lm_head.weight.transpose().shape
+            old_lm_head.weight.shape if not transposed else mint.transpose(old_lm_head.weight).shape
         )
 
         if old_num_tokens == new_num_tokens:

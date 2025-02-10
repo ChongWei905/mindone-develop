@@ -55,7 +55,7 @@ class XLMRobertaEmbeddings(nn.Cell):
         self.dropout = mint.nn.Dropout(p=config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        self.position_ids = mint.arange(config.max_position_embeddings).unsqueeze(0)
+        self.position_ids = mint.unsqueeze(mint.arange(config.max_position_embeddings), 0)
         self.token_type_ids = mint.zeros(self.position_ids.shape, dtype=ms.int32)
 
         # End copy
@@ -87,7 +87,7 @@ class XLMRobertaEmbeddings(nn.Cell):
         if token_type_ids is None:
             if hasattr(self, "token_type_ids"):
                 buffered_token_type_ids = self.token_type_ids[:, :seq_length]
-                buffered_token_type_ids_expanded = buffered_token_type_ids.broadcast_to((input_shape[0], seq_length))
+                buffered_token_type_ids_expanded = mint.broadcast_to(buffered_token_type_ids,(input_shape[0], seq_length))
                 token_type_ids = buffered_token_type_ids_expanded
             else:
                 token_type_ids = mint.zeros(input_shape, dtype=ms.int32)
@@ -119,7 +119,7 @@ class XLMRobertaEmbeddings(nn.Cell):
         sequence_length = input_shape[1]
 
         position_ids = mint.arange(self.padding_idx + 1, sequence_length + self.padding_idx + 1, dtype=ms.int32)
-        return position_ids.unsqueeze(0).broadcast_to(input_shape)
+        return mint.broadcast_to(mint.unsqueeze(position_ids, 0), input_shape)
 
 
 # Copied from transformers.models.roberta.modeling_roberta.RobertaSelfAttention with Roberta->XLMRoberta
@@ -151,7 +151,7 @@ class XLMRobertaSelfAttention(nn.Cell):
     def transpose_for_scores(self, x: ms.Tensor) -> ms.Tensor:
         new_x_shape = x.shape[:-1] + (self.num_attention_heads, self.attention_head_size)
         x = x.view(new_x_shape)
-        return x.permute((0, 2, 1, 3))
+        return mint.permute(x, (0, 2, 1, 3))
 
     def construct(
         self,
@@ -202,7 +202,7 @@ class XLMRobertaSelfAttention(nn.Cell):
             past_key_value = (key_layer, value_layer)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = mint.matmul(query_layer, key_layer.swapaxes(-1, -2))
+        attention_scores = mint.matmul(query_layer, mint.swapaxes(key_layer, -1, -2))
 
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
             query_length, key_length = query_layer.shape[2], key_layer.shape[2]
@@ -217,17 +217,17 @@ class XLMRobertaSelfAttention(nn.Cell):
             positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
 
             if self.position_embedding_type == "relative_key":
-                relative_position_scores = mint.matmul(
-                    query_layer.unsqueeze(3), positional_embedding.permute(0, 2, 1)
-                ).squeeze(3)
+                relative_position_scores = mint.squeeze(mint.matmul(
+                    mint.unsqueeze(query_layer, 3), mint.permute(positional_embedding, (0, 2, 1))
+                ), 3)
                 attention_scores = attention_scores + relative_position_scores
             elif self.position_embedding_type == "relative_key_query":
-                relative_position_scores_query = mint.matmul(
-                    query_layer.unsqueeze(3), positional_embedding.permute(0, 2, 1)
-                ).squeeze(3)
-                relative_position_scores_key = (
+                relative_position_scores_query = mint.squeeze(mint.matmul(
+                    mint.unsqueeze(query_layer, 3), mint.permute(positional_embedding, (0, 2, 1))
+                ), 3)
+                relative_position_scores_key = mint.sum((
                     key_layer[:, :, None, :, :] * positional_embedding[None, None, :, :, :]
-                ).sum(-1)
+                ), -1)
                 attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
 
         attention_scores = attention_scores / mint.sqrt(
@@ -250,7 +250,7 @@ class XLMRobertaSelfAttention(nn.Cell):
 
         context_layer = mint.matmul(attention_probs, value_layer)
 
-        context_layer = context_layer.permute(0, 2, 1, 3)
+        context_layer = mint.permute(context_layer, (0, 2, 1, 3))
         new_context_layer_shape = context_layer.shape[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(new_context_layer_shape)
 
@@ -709,7 +709,7 @@ class XLMRobertaModel(XLMRobertaPreTrainedModel):
         if token_type_ids is None:
             if hasattr(self.embeddings, "token_type_ids"):
                 buffered_token_type_ids = self.embeddings.token_type_ids[:, :seq_length]
-                buffered_token_type_ids_expanded = buffered_token_type_ids.broadcast_to((batch_size, seq_length))
+                buffered_token_type_ids_expanded = mint.broadcast_to(buffered_token_type_ids, (batch_size, seq_length))
                 token_type_ids = buffered_token_type_ids_expanded
             else:
                 token_type_ids = mint.zeros(input_shape, dtype=ms.int64)
@@ -783,7 +783,7 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     """
     # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.
     mask = input_ids.ne(padding_idx).int()
-    incremental_indices = (ops.cumsum(mask, axis=1).type_as(mask) + past_key_values_length) * mask
+    incremental_indices = (mint.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
     return incremental_indices.long() + padding_idx
 
 

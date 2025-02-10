@@ -166,7 +166,8 @@ class LaplaceActivation(nn.Cell):
     """
 
     def construct(self, input, mu=0.707107, sigma=0.282095):
-        input = (input - mu).div(sigma * math.sqrt(2.0))
+        input = mint.div((input - mu), sigma * math.sqrt(2.0))
+        input = mint.div(input - mu, sigma * math.sqrt(2.0))
         return 0.5 * (1.0 + mint.erf(input))
 
 

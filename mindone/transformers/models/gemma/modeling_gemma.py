@@ -84,8 +84,8 @@ def _prepare_4d_causal_attention_mask_with_cache_position(
         if sequence_length != 1:
             # TODO： ops.triu 未收录，不支持
             causal_mask = ops.triu(causal_mask, diagonal=1)
-        causal_mask *= mint.arange(target_length) > cache_position.reshape(-1, 1)
-        causal_mask = causal_mask[None, None, :, :].broadcast_to((batch_size, 1, -1, -1))
+        causal_mask *= mint.arange(target_length) > mint.reshape(cache_position, (-1, 1))
+        causal_mask = mint.broadcast_to(causal_mask[None, None, :, :], (batch_size, 1, -1, -1))
         if attention_mask is not None:
             causal_mask = causal_mask.copy()  # copy to contiguous memory for in-place edit
             mask_length = attention_mask.shape[-1]
@@ -104,7 +104,7 @@ class GemmaRMSNorm(nn.Cell):
 
     def _norm(self, x):
         # TODO: ops.rsqrt 未收录，不支持
-        return x * ops.rsqrt(x.pow(2).mean(-1, keep_dims=True) + self.eps)
+        return x * ops.rsqrt(mint.pow(x, 2).mean(-1, keep_dims=True) + self.eps)
 
     def construct(self, x):
         output = self._norm(x.float())
@@ -132,14 +132,14 @@ class GemmaRotaryEmbedding(nn.Cell):
 
     def construct(self, x, position_ids, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
-        inv_freq_expanded = self.inv_freq[None, :, None].float().broadcast_to((position_ids.shape[0], -1, 1))
+        inv_freq_expanded = mint.broadcast_to(self.inv_freq[None, :, None].float(), (position_ids.shape[0], -1, 1))
         position_ids_expanded = position_ids[:, None, :].float()
         # Force float32 since bfloat16 loses precision on long contexts
         # See https://github.com/huggingface/transformers/pull/29285
-        freqs = mint.matmul(inv_freq_expanded.float(), position_ids_expanded.float()).swapaxes(1, 2)
+        freqs = mint.matmul(inv_freq_expanded.float(), mint.swapaxes(position_ids_expanded.float()), 1, 2)
         emb = mint.cat((freqs, freqs), axis=-1)
-        cos = emb.cos()
-        sin = emb.sin()
+        cos = mint.cos(emb)
+        sin = mint.sin(emb)
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
@@ -222,8 +222,8 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     Returns:
         `tuple(ms.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
     """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
+    cos = mint.unsqueeze(cos, unsqueeze_dim)
+    sin = mint.unsqueeze(sin, unsqueeze_dim)
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
@@ -237,8 +237,8 @@ def repeat_kv(hidden_states: ms.Tensor, n_rep: int) -> ms.Tensor:
     batch, num_key_value_heads, slen, head_dim = hidden_states.shape
     if n_rep == 1:
         return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].broadcast_to((batch, num_key_value_heads, n_rep, slen, head_dim))
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+    hidden_states = mint.broadcast_to(hidden_states[:, :, None, :, :], (batch, num_key_value_heads, n_rep, slen, head_dim))
+    return mint.reshape(hidden_states, (batch, num_key_value_heads * n_rep, slen, head_dim))
 
 
 class GemmaAttention(nn.Cell):
@@ -302,9 +302,9 @@ class GemmaAttention(nn.Cell):
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).swapaxes(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).swapaxes(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).swapaxes(1, 2)
+        query_states = mint.swapaxes(query_states.view(bsz, q_len, self.num_heads, self.head_dim), 1, 2)
+        key_states = mint.swapaxes(key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim), 1, 2)
+        value_states = mint.swapaxes(value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim), 1, 2)
 
         cos, sin = self.rotary_emb(value_states, position_ids)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
@@ -312,7 +312,7 @@ class GemmaAttention(nn.Cell):
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        attn_weights = ops.matmul(query_states, key_states.swapaxes(2, 3)) * self.scaling
+        attn_weights = ops.matmul(query_states, mint.swapaxes(key_states, 2, 3)) * self.scaling
 
         if attention_mask is not None:  # no matter the length, we just slice it
             causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
@@ -331,7 +331,7 @@ class GemmaAttention(nn.Cell):
                 f" {attn_output.shape}"
             )
 
-        attn_output = attn_output.swapaxes(1, 2)
+        attn_output = mint.swapaxes(attn_output, 1, 2)
 
         attn_output = attn_output.view(bsz, q_len, -1)
         attn_output = self.o_proj(attn_output)
@@ -380,18 +380,18 @@ class GemmaFlashAttention2(GemmaAttention):
         # Flash attention requires the input to have the shape
         # batch_size x seq_length x head_dim x hidden_dim
         # therefore we just need to keep the original shape
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).swapaxes(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).swapaxes(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).swapaxes(1, 2)
+        query_states = mint.swapaxes(query_states.view(bsz, q_len, self.num_heads, self.head_dim), 1, 2)
+        key_states = mint.swapaxes(key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim), 1, 2)
+        value_states = mint.swapaxes(value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim), 1, 2)
 
         cos, sin = self.rotary_emb(value_states, position_ids)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim].
         # We would need to refactor the KV cache to be able to avoid many of these transpose/reshape/view.
-        query_states = query_states.swapaxes(1, 2)
-        key_states = key_states.swapaxes(1, 2)
-        value_states = value_states.swapaxes(1, 2)
+        query_states = mint.swapaxes(query_states, 1, 2)
+        key_states = mint.swapaxes(key_states, 1, 2)
+        value_states = mint.swapaxes(value_states, 1, 2)
 
         # In PEFT, usually we cast the layer norms in float32 for training stability reasons
         # therefore the input hidden states gets silently casted in float32. Hence, we need
@@ -426,7 +426,7 @@ class GemmaFlashAttention2(GemmaAttention):
             -1
         ].to(input_dtype)
 
-        attn_output = attn_output.reshape(bsz, q_len, -1)
+        attn_output = mint.reshape(attn_output, (bsz, q_len, -1))
         attn_output = self.o_proj(attn_output)
 
         if not output_attentions:
@@ -478,9 +478,9 @@ class GemmaSdpaAttention(GemmaAttention):
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).swapaxes(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).swapaxes(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).swapaxes(1, 2)
+        query_states = mint.swapaxes(query_states.view(bsz, q_len, self.num_heads, self.head_dim), 1, 2)
+        key_states = mint.swapaxes(key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim), 1, 2)
+        value_states = mint.swapaxes(value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim), 1, 2)
 
         cos, sin = self.rotary_emb(value_states, position_ids)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
@@ -499,7 +499,7 @@ class GemmaSdpaAttention(GemmaAttention):
             attn_mask=causal_mask,
         )
 
-        attn_output = attn_output.swapaxes(1, 2)
+        attn_output = mint.swapaxes(attn_output, 1, 2)
         attn_output = attn_output.view(bsz, q_len, -1)
 
         attn_output = self.o_proj(attn_output)
@@ -707,7 +707,7 @@ class GemmaModel(GemmaPreTrainedModel):
             )
 
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            position_ids = mint.unsqueeze(cache_position, 0)
 
         causal_mask = self._update_causal_mask(
             attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
@@ -963,7 +963,7 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
 
         if attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
+            position_ids = mint.cumsum(attention_mask.long(), -1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
             if past_key_values:
                 position_ids = position_ids[:, -input_ids.shape[1] :]
@@ -1055,7 +1055,7 @@ class GemmaForSequenceClassification(GemmaPreTrainedModel):
         else:
             if input_ids is not None:
                 # if no pad token found, use modulo instead of reverse indexing for ONNX compatibility
-                sequence_lengths = mint.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1
+                sequence_lengths = mint.eq(input_ids, mint.argmax(self.config.pad_token_id).int(), -1) - 1
                 sequence_lengths = sequence_lengths % input_ids.shape[-1]
             else:
                 sequence_lengths = -1
@@ -1075,7 +1075,7 @@ class GemmaForSequenceClassification(GemmaPreTrainedModel):
             if self.config.problem_type == "regression":
                 loss_fct = mint.nn.MSELoss()
                 if self.num_labels == 1:
-                    loss = loss_fct(pooled_logits.squeeze(), labels.squeeze())
+                    loss = loss_fct(mint.squeeze(pooled_logits), mint.squeeze(labels))
                 else:
                     loss = loss_fct(pooled_logits, labels)
             elif self.config.problem_type == "single_label_classification":
@@ -1182,11 +1182,11 @@ def scaled_dot_product_attention(query, key, value, attn_mask=None, dtype=None):
     if attn_mask is not None:
         attn_mask = attn_mask.masked_fill(not attn_mask, -1e5) if attn_mask.dtype == ms.bool_ else attn_mask
         attn_weight = mint.nn.Softmax(dim=-1)(
-            ops.cast(ops.matmul(query, key.swapaxes(-2, -1)) / (query.shape[-1] ** 0.5) + attn_mask, ms.float32)
+            ops.cast(ops.matmul(query, mint.swapaxes(key, -2, -1)) / (query.shape[-1] ** 0.5) + attn_mask, ms.float32)
         ).astype(_dtype)
     else:
         attn_weight = mint.nn.Softmax(dim=-1)(
-            ops.cast(ops.matmul(query, key.swapaxes(-2, -1)) / (query.shape[-1] ** 0.5), ms.float32)
+            ops.cast(ops.matmul(query, mint.swapaxes(key, -2, -1)) / (query.shape[-1] ** 0.5), ms.float32)
         ).astype(_dtype)
 
     out = mint.matmul(attn_weight, value)

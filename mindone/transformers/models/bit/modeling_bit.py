@@ -302,7 +302,7 @@ def drop_path(input: ms.Tensor, drop_prob: float = 0.0, training: bool = False) 
     shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
     random_tensor = keep_prob + mint.rand(shape, dtype=input.dtype, device=input.device)
     random_tensor.floor_()  # binarize
-    output = input.div(keep_prob) * random_tensor
+    output = mint.div(input, keep_prob) * random_tensor
     return output
 
 

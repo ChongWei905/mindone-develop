@@ -184,7 +184,9 @@ class WuerstchenDecoderPipeline(DiffusionPipeline):
 
             # duplicate unconditional embeddings for each generation per prompt, using mps friendly method
             seq_len = uncond_text_encoder_hidden_states.shape[1]
-            uncond_text_encoder_hidden_states = uncond_text_encoder_hidden_states.tile((1, num_images_per_prompt, 1))
+            uncond_text_encoder_hidden_states = mint.tile(
+                uncond_text_encoder_hidden_states, (1, num_images_per_prompt, 1)
+            )
             uncond_text_encoder_hidden_states = uncond_text_encoder_hidden_states.view(
                 batch_size * num_images_per_prompt, seq_len, -1
             )

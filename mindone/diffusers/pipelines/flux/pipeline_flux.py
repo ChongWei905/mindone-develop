@@ -222,7 +222,7 @@ class FluxPipeline(DiffusionPipeline, FluxLoraLoaderMixin):
         _, seq_len, _ = prompt_embeds.shape
 
         # duplicate text embeddings and attention mask for each generation per prompt, using mps friendly method
-        prompt_embeds = prompt_embeds.tile((1, num_images_per_prompt, 1))
+        prompt_embeds = mint.tile(prompt_embeds, (1, num_images_per_prompt, 1))
         prompt_embeds = prompt_embeds.view(batch_size * num_images_per_prompt, seq_len, -1)
 
         return prompt_embeds
@@ -262,7 +262,7 @@ class FluxPipeline(DiffusionPipeline, FluxLoraLoaderMixin):
         prompt_embeds = prompt_embeds.to(dtype=self.text_encoder.dtype)
 
         # duplicate text embeddings for each generation per prompt, using mps friendly method
-        prompt_embeds = prompt_embeds.tile((1, num_images_per_prompt))
+        prompt_embeds = mint.tile(prompt_embeds, (1, num_images_per_prompt))
         prompt_embeds = prompt_embeds.view(batch_size * num_images_per_prompt, -1)
 
         return prompt_embeds
@@ -340,7 +340,7 @@ class FluxPipeline(DiffusionPipeline, FluxLoraLoaderMixin):
 
         dtype = self.text_encoder.dtype if self.text_encoder is not None else self.transformer.dtype
         text_ids = mint.zeros((batch_size, prompt_embeds.shape[1], 3), dtype=dtype)
-        text_ids = text_ids.tile((num_images_per_prompt, 1, 1))
+        text_ids = mint.tile(text_ids, (num_images_per_prompt, 1, 1))
 
         return prompt_embeds, pooled_prompt_embeds, text_ids
 
@@ -400,7 +400,7 @@ class FluxPipeline(DiffusionPipeline, FluxLoraLoaderMixin):
 
         latent_image_id_height, latent_image_id_width, latent_image_id_channels = latent_image_ids.shape
 
-        latent_image_ids = latent_image_ids[None, :].tile((batch_size, 1, 1, 1))
+        latent_image_ids = mint.tile(latent_image_ids[None, :], (batch_size, 1, 1, 1))
         latent_image_ids = mint.reshape(
             latent_image_ids, (batch_size, latent_image_id_height * latent_image_id_width, latent_image_id_channels)
         )

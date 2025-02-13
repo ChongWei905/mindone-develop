@@ -237,7 +237,7 @@ class I2VGenXLPipeline(DiffusionPipeline, StableDiffusionMixin):
 
         bs_embed, seq_len, _ = prompt_embeds.shape
         # duplicate text embeddings for each generation per prompt, using mps friendly method
-        prompt_embeds = prompt_embeds.tile((1, num_videos_per_prompt, 1))
+        prompt_embeds = mint.tile(prompt_embeds, (1, num_videos_per_prompt, 1))
         prompt_embeds = prompt_embeds.view(bs_embed * num_videos_per_prompt, seq_len, -1)
 
         # get unconditional embeddings for classifier free guidance
@@ -304,7 +304,7 @@ class I2VGenXLPipeline(DiffusionPipeline, StableDiffusionMixin):
 
             negative_prompt_embeds = negative_prompt_embeds.to(dtype=prompt_embeds_dtype)
 
-            negative_prompt_embeds = negative_prompt_embeds.tile((1, num_videos_per_prompt, 1))
+            negative_prompt_embeds = mint.tile(negative_prompt_embeds, (1, num_videos_per_prompt, 1))
             negative_prompt_embeds = negative_prompt_embeds.view(batch_size * num_videos_per_prompt, seq_len, -1)
 
         return prompt_embeds, negative_prompt_embeds
@@ -332,7 +332,7 @@ class I2VGenXLPipeline(DiffusionPipeline, StableDiffusionMixin):
 
         # duplicate image embeddings for each generation per prompt, using mps friendly method
         bs_embed, seq_len, _ = image_embeddings.shape
-        image_embeddings = image_embeddings.tile((1, num_videos_per_prompt, 1))
+        image_embeddings = mint.tile(image_embeddings, (1, num_videos_per_prompt, 1))
         image_embeddings = image_embeddings.view(bs_embed * num_videos_per_prompt, seq_len, -1)
 
         if self.do_classifier_free_guidance:
@@ -452,7 +452,7 @@ class I2VGenXLPipeline(DiffusionPipeline, StableDiffusionMixin):
             image_latents = mint.cat([image_latents, frame_position_mask], dim=2)
 
         # duplicate image_latents for each generation per prompt, using mps friendly method
-        image_latents = image_latents.tile((num_videos_per_prompt, 1, 1, 1, 1))
+        image_latents = mint.tile(image_latents, (num_videos_per_prompt, 1, 1, 1, 1))
 
         if self.do_classifier_free_guidance:
             image_latents = mint.cat([image_latents] * 2)
@@ -639,7 +639,7 @@ class I2VGenXLPipeline(DiffusionPipeline, StableDiffusionMixin):
             fps_tensor = ms.Tensor([target_fps, target_fps])
         else:
             fps_tensor = ms.Tensor([target_fps])
-        fps_tensor = fps_tensor.tile((batch_size * num_videos_per_prompt, 1)).ravel()
+        fps_tensor = mint.ravel(mint.tile(fps_tensor, (batch_size * num_videos_per_prompt, 1)))
 
         # 4. Prepare timesteps
         self.scheduler.set_timesteps(num_inference_steps)

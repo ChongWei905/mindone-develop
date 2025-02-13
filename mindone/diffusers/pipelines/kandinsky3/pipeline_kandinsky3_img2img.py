@@ -178,9 +178,9 @@ class Kandinsky3Img2ImgPipeline(DiffusionPipeline, LoraLoaderMixin):
 
         bs_embed, seq_len, _ = prompt_embeds.shape
         # duplicate text embeddings for each generation per prompt, using mps friendly method
-        prompt_embeds = prompt_embeds.tile((1, num_images_per_prompt, 1))
+        prompt_embeds = mint.tile(prompt_embeds, (1, num_images_per_prompt, 1))
         prompt_embeds = prompt_embeds.view(bs_embed * num_images_per_prompt, seq_len, -1)
-        attention_mask = attention_mask.tile((num_images_per_prompt, 1))
+        attention_mask = mint.tile(attention_mask, (num_images_per_prompt, 1))
         # get unconditional embeddings for classifier free guidance
         if do_classifier_free_guidance and negative_prompt_embeds is None:
             uncond_tokens: List[str]
@@ -228,9 +228,9 @@ class Kandinsky3Img2ImgPipeline(DiffusionPipeline, LoraLoaderMixin):
 
             negative_prompt_embeds = negative_prompt_embeds.to(dtype=dtype)
             if negative_prompt_embeds.shape != prompt_embeds.shape:
-                negative_prompt_embeds = negative_prompt_embeds.tile((1, num_images_per_prompt, 1))
+                negative_prompt_embeds = mint.tile(negative_prompt_embeds, (1, num_images_per_prompt, 1))
                 negative_prompt_embeds = negative_prompt_embeds.view(batch_size * num_images_per_prompt, seq_len, -1)
-                negative_attention_mask = negative_attention_mask.tile((num_images_per_prompt, 1))
+                negative_attention_mask = mint.tile(negative_attention_mask, (num_images_per_prompt, 1))
 
             # For classifier free guidance, we need to do two forward passes.
             # Here we concatenate the unconditional and text embeddings into a single batch

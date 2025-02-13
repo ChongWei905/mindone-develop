@@ -452,7 +452,9 @@ class MarigoldNormalsPipeline(DiffusionPipeline):
 
         del image
 
-        batch_empty_text_embedding = self.empty_text_embedding.to(dtype=dtype).tile((batch_size, 1, 1))  # [B,1024,2]
+        batch_empty_text_embedding = mint.tile(
+            self.empty_text_embedding.to(dtype=dtype), (batch_size, 1, 1)
+        )  # [B,1024,2]
 
         # 5. Process the denoising loop. All `N * E` latents are processed sequentially in batches of size `batch_size`.
         # The unet model takes concatenated latent spaces of the input image and the predicted modality as an input, and

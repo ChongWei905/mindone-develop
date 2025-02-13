@@ -245,7 +245,7 @@ class CogVideoXImageToVideoPipeline(DiffusionPipeline):
 
         # duplicate text embeddings for each generation per prompt, using mps friendly method
         _, seq_len, _ = prompt_embeds.shape
-        prompt_embeds = prompt_embeds.tile((1, num_videos_per_prompt, 1))
+        prompt_embeds = mint.tile(prompt_embeds, (1, num_videos_per_prompt, 1))
         prompt_embeds = prompt_embeds.view(batch_size * num_videos_per_prompt, seq_len, -1)
 
         return prompt_embeds

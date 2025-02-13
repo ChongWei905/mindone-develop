@@ -567,8 +567,8 @@ def get_2d_rotary_pos_embed_lumina(embed_dim, len_h, len_w, linear_factor=1.0, n
     emb_w = get_1d_rotary_pos_embed(
         embed_dim // 2, len_w, linear_factor=linear_factor, ntk_factor=ntk_factor
     )  # (W, D/4)
-    emb_h = emb_h.view(len_h, 1, embed_dim // 4, 1).tile((1, len_w, 1, 1))  # (H, W, D/4, 1)
-    emb_w = emb_w.view(1, len_w, embed_dim // 4, 1).tile((len_h, 1, 1, 1))  # (H, W, D/4, 1)
+    emb_h = mint.tile(emb_h.view(len_h, 1, embed_dim // 4, 1), (1, len_w, 1, 1))  # (H, W, D/4, 1)
+    emb_w = mint.tile(emb_w.view(1, len_w, embed_dim // 4, 1), (len_h, 1, 1, 1))  # (H, W, D/4, 1)
 
     emb = mint.flatten(mint.cat([emb_h, emb_w], dim=-1), start_dim=2)  # (H, W, D/2)
     return emb
@@ -1585,7 +1585,7 @@ class IPAdapterPlusImageProjection(nn.Cell):
         Returns:
             ms.Tensor: Output Tensor.
         """
-        latents = self.latents.tile((x.shape[0], 1, 1))
+        latents = mint.tile(self.latents, (x.shape[0], 1, 1))
 
         x = self.proj_in(x)
 

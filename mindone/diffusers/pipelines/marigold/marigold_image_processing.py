@@ -174,7 +174,7 @@ class MarigoldImageProcessor(ConfigMixin):
             raise ValueError(f"Input type unsupported: {type(image)}.")
 
         if image.shape[1] == 1:
-            image = image.tile((1, 3, 1, 1))  # [N,1,H,W] -> [N,3,H,W]
+            image = mint.tile(image, (1, 3, 1, 1))  # [N,1,H,W] -> [N,3,H,W]
         if image.shape[1] != 3:
             raise ValueError(f"Input image is not 1- or 3-channel: {image.shape}.")
 

@@ -790,7 +790,7 @@ class UNet2DConditionModel(
 
         # broadcast to batch dimension in a way that's compatible with ONNX/Core ML
         if timesteps.shape[0] == 1:
-            timesteps = timesteps.tile((sample.shape[0],))
+            timesteps = mint.tile(timesteps, (sample.shape[0],))
 
         t_emb = self.time_proj(timesteps)
 

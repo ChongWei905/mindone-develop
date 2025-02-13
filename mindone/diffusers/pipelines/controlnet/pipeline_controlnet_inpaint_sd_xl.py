@@ -441,7 +441,7 @@ class StableDiffusionXLControlNetInpaintPipeline(
 
         bs_embed, seq_len, _ = prompt_embeds.shape
         # duplicate text embeddings for each generation per prompt, using mps friendly method
-        prompt_embeds = prompt_embeds.tile((1, num_images_per_prompt, 1))
+        prompt_embeds = mint.tile(prompt_embeds, (1, num_images_per_prompt, 1))
         prompt_embeds = prompt_embeds.view(bs_embed * num_images_per_prompt, seq_len, -1)
 
         if do_classifier_free_guidance:
@@ -453,14 +453,14 @@ class StableDiffusionXLControlNetInpaintPipeline(
             else:
                 negative_prompt_embeds = negative_prompt_embeds.to(dtype=self.unet.dtype)
 
-            negative_prompt_embeds = negative_prompt_embeds.tile((1, num_images_per_prompt, 1))
+            negative_prompt_embeds = mint.tile(negative_prompt_embeds, (1, num_images_per_prompt, 1))
             negative_prompt_embeds = negative_prompt_embeds.view(batch_size * num_images_per_prompt, seq_len, -1)
 
-        pooled_prompt_embeds = pooled_prompt_embeds.tile((1, num_images_per_prompt)).view(
+        pooled_prompt_embeds = mint.tile(pooled_prompt_embeds, (1, num_images_per_prompt)).view(
             bs_embed * num_images_per_prompt, -1
         )
         if do_classifier_free_guidance:
-            negative_pooled_prompt_embeds = negative_pooled_prompt_embeds.tile((1, num_images_per_prompt)).view(
+            negative_pooled_prompt_embeds = mint.tile(negative_pooled_prompt_embeds, (1, num_images_per_prompt)).view(
                 bs_embed * num_images_per_prompt, -1
             )
 
@@ -536,16 +536,19 @@ class StableDiffusionXLControlNetInpaintPipeline(
             for single_image_embeds in ip_adapter_image_embeds:
                 if do_classifier_free_guidance:
                     single_negative_image_embeds, single_image_embeds = mint.chunk(single_image_embeds, 2)
-                    single_image_embeds = single_image_embeds.tile(
-                        (num_images_per_prompt, *(repeat_dims * len(single_image_embeds.shape[1:])))
+                    single_image_embeds = mint.tile(
+                        single_image_embeds,
+                        (num_images_per_prompt, *(repeat_dims * len(single_image_embeds.shape[1:]))),
                     )
-                    single_negative_image_embeds = single_negative_image_embeds.tile(
-                        (num_images_per_prompt, *(repeat_dims * len(single_negative_image_embeds.shape[1:])))
+                    single_negative_image_embeds = mint.tile(
+                        single_negative_image_embeds,
+                        (num_images_per_prompt, *(repeat_dims * len(single_negative_image_embeds.shape[1:]))),
                     )
                     single_image_embeds = mint.cat([single_negative_image_embeds, single_image_embeds])
                 else:
-                    single_image_embeds = single_image_embeds.tile(
-                        (num_images_per_prompt, *(repeat_dims * len(single_image_embeds.shape[1:])))
+                    single_image_embeds = mint.tile(
+                        single_image_embeds,
+                        (num_images_per_prompt, *(repeat_dims * len(single_image_embeds.shape[1:]))),
                     )
                 image_embeds.append(single_image_embeds)
 
@@ -878,7 +881,7 @@ class StableDiffusionXLControlNetInpaintPipeline(
                 image_latents = image
             else:
                 image_latents = self._encode_vae_image(image=image, generator=generator)
-            image_latents = image_latents.tile((batch_size // image_latents.shape[0], 1, 1, 1))
+            image_latents = mint.tile(image_latents, (batch_size // image_latents.shape[0], 1, 1, 1))
 
         if latents is None and add_noise:
             noise = randn_tensor(shape, generator=generator, dtype=dtype)
@@ -945,7 +948,7 @@ class StableDiffusionXLControlNetInpaintPipeline(
                     f" a total batch size of {batch_size}, but {mask.shape[0]} masks were passed. Make sure the number"
                     " of masks that you pass is divisible by the total requested batch size."
                 )
-            mask = mask.tile((batch_size // mask.shape[0], 1, 1, 1))
+            mask = mint.tile(mask, (batch_size // mask.shape[0], 1, 1, 1))
 
         mask = mint.cat([mask] * 2) if do_classifier_free_guidance else mask
 
@@ -960,7 +963,9 @@ class StableDiffusionXLControlNetInpaintPipeline(
                         f" to a total batch size of {batch_size}, but {masked_image_latents.shape[0]} images were passed."
                         " Make sure the number of images that you pass is divisible by the total requested batch size."
                     )
-                masked_image_latents = masked_image_latents.tile((batch_size // masked_image_latents.shape[0], 1, 1, 1))
+                masked_image_latents = mint.tile(
+                    masked_image_latents, (batch_size // masked_image_latents.shape[0], 1, 1, 1)
+                )
 
             masked_image_latents = (
                 mint.cat([masked_image_latents] * 2) if do_classifier_free_guidance else masked_image_latents
@@ -1423,7 +1428,7 @@ class StableDiffusionXLControlNetInpaintPipeline(
                 f"steps is {num_inference_steps} which is < 1 and not appropriate for this pipeline."
             )
         # at which timestep to set the initial noise (n.b. 50% if strength is 0.5)
-        latent_timestep = timesteps[:1].tile((batch_size * num_images_per_prompt,))
+        latent_timestep = mint.tile(timesteps[:1], (batch_size * num_images_per_prompt,))
         # create a boolean to check if the strength is set to 1. if so then initialise the latents with pure noise
         is_strength_max = strength == 1.0
         self._num_timesteps = len(timesteps)
@@ -1581,12 +1586,12 @@ class StableDiffusionXLControlNetInpaintPipeline(
             dtype=prompt_embeds.dtype,
             text_encoder_projection_dim=text_encoder_projection_dim,
         )
-        add_time_ids = add_time_ids.tile((batch_size * num_images_per_prompt, 1))
+        add_time_ids = mint.tile(add_time_ids, (batch_size * num_images_per_prompt, 1))
 
         if self.do_classifier_free_guidance:
             prompt_embeds = mint.cat([negative_prompt_embeds, prompt_embeds], dim=0)
             add_text_embeds = mint.cat([negative_pooled_prompt_embeds, add_text_embeds], dim=0)
-            add_neg_time_ids = add_neg_time_ids.tile((batch_size * num_images_per_prompt, 1))
+            add_neg_time_ids = mint.tile(add_neg_time_ids, (batch_size * num_images_per_prompt, 1))
             add_time_ids = mint.cat([add_neg_time_ids, add_time_ids], dim=0)
 
         # 11. Denoising loop

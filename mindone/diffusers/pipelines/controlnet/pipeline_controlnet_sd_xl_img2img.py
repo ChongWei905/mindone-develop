@@ -448,7 +448,7 @@ class StableDiffusionXLControlNetImg2ImgPipeline(
 
         bs_embed, seq_len, _ = prompt_embeds.shape
         # duplicate text embeddings for each generation per prompt, using mps friendly method
-        prompt_embeds = prompt_embeds.tile((1, num_images_per_prompt, 1))
+        prompt_embeds = mint.tile(prompt_embeds, (1, num_images_per_prompt, 1))
         prompt_embeds = prompt_embeds.view(bs_embed * num_images_per_prompt, seq_len, -1)
 
         if do_classifier_free_guidance:
@@ -460,14 +460,14 @@ class StableDiffusionXLControlNetImg2ImgPipeline(
             else:
                 negative_prompt_embeds = negative_prompt_embeds.to(dtype=self.unet.dtype)
 
-            negative_prompt_embeds = negative_prompt_embeds.tile((1, num_images_per_prompt, 1))
+            negative_prompt_embeds = mint.tile(negative_prompt_embeds, (1, num_images_per_prompt, 1))
             negative_prompt_embeds = negative_prompt_embeds.view(batch_size * num_images_per_prompt, seq_len, -1)
 
-        pooled_prompt_embeds = pooled_prompt_embeds.tile((1, num_images_per_prompt)).view(
+        pooled_prompt_embeds = mint.tile(pooled_prompt_embeds, (1, num_images_per_prompt)).view(
             bs_embed * num_images_per_prompt, -1
         )
         if do_classifier_free_guidance:
-            negative_pooled_prompt_embeds = negative_pooled_prompt_embeds.tile((1, num_images_per_prompt)).view(
+            negative_pooled_prompt_embeds = mint.tile(negative_pooled_prompt_embeds, (1, num_images_per_prompt)).view(
                 bs_embed * num_images_per_prompt, -1
             )
 
@@ -543,16 +543,19 @@ class StableDiffusionXLControlNetImg2ImgPipeline(
             for single_image_embeds in ip_adapter_image_embeds:
                 if do_classifier_free_guidance:
                     single_negative_image_embeds, single_image_embeds = mint.chunk(single_image_embeds, 2)
-                    single_image_embeds = single_image_embeds.tile(
-                        (num_images_per_prompt, *(repeat_dims * len(single_image_embeds.shape[1:])))
+                    single_image_embeds = mint.tile(
+                        single_image_embeds,
+                        (num_images_per_prompt, *(repeat_dims * len(single_image_embeds.shape[1:]))),
                     )
-                    single_negative_image_embeds = single_negative_image_embeds.tile(
-                        (num_images_per_prompt, *(repeat_dims * len(single_negative_image_embeds.shape[1:])))
+                    single_negative_image_embeds = mint.tile(
+                        single_negative_image_embeds,
+                        (num_images_per_prompt, *(repeat_dims * len(single_negative_image_embeds.shape[1:]))),
                     )
                     single_image_embeds = mint.cat([single_negative_image_embeds, single_image_embeds])
                 else:
-                    single_image_embeds = single_image_embeds.tile(
-                        (num_images_per_prompt, *(repeat_dims * len(single_image_embeds.shape[1:])))
+                    single_image_embeds = mint.tile(
+                        single_image_embeds,
+                        (num_images_per_prompt, *(repeat_dims * len(single_image_embeds.shape[1:]))),
                     )
                 image_embeds.append(single_image_embeds)
 
@@ -1358,7 +1361,7 @@ class StableDiffusionXLControlNetImg2ImgPipeline(
         # 5. Prepare timesteps
         self.scheduler.set_timesteps(num_inference_steps)
         timesteps, num_inference_steps = self.get_timesteps(num_inference_steps, strength)
-        latent_timestep = timesteps[:1].tile((batch_size * num_images_per_prompt,))
+        latent_timestep = mint.tile(timesteps[:1], (batch_size * num_images_per_prompt,))
         self._num_timesteps = len(timesteps)
 
         # 6. Prepare latent variables
@@ -1415,12 +1418,12 @@ class StableDiffusionXLControlNetImg2ImgPipeline(
             dtype=prompt_embeds.dtype,
             text_encoder_projection_dim=text_encoder_projection_dim,
         )
-        add_time_ids = add_time_ids.tile((batch_size * num_images_per_prompt, 1))
+        add_time_ids = mint.tile(add_time_ids, (batch_size * num_images_per_prompt, 1))
 
         if self.do_classifier_free_guidance:
             prompt_embeds = mint.cat([negative_prompt_embeds, prompt_embeds], dim=0)
             add_text_embeds = mint.cat([negative_pooled_prompt_embeds, add_text_embeds], dim=0)
-            add_neg_time_ids = add_neg_time_ids.tile((batch_size * num_images_per_prompt, 1))
+            add_neg_time_ids = mint.tile(add_neg_time_ids, (batch_size * num_images_per_prompt, 1))
             add_time_ids = mint.cat([add_neg_time_ids, add_time_ids], dim=0)
 
         # we're popping the `scale` instead of getting it because otherwise `scale` will be propagated

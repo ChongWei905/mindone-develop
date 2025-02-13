@@ -311,7 +311,7 @@ class KandinskyV22Img2ImgPipeline(DiffusionPipeline):
         latents = latents.repeat_interleave(num_images_per_prompt, dim=0)
         self.scheduler.set_timesteps(num_inference_steps)
         timesteps, num_inference_steps = self.get_timesteps(num_inference_steps, strength)
-        latent_timestep = timesteps[:1].tile((batch_size * num_images_per_prompt,))
+        latent_timestep = mint.tile(timesteps[:1], (batch_size * num_images_per_prompt,))
         height, width = downscale_height_and_width(height, width, self.movq_scale_factor)
         latents = self.prepare_latents(
             latents, latent_timestep, batch_size, num_images_per_prompt, image_embeds.dtype, generator

@@ -244,7 +244,7 @@ class KandinskyV22PriorPipeline(DiffusionPipeline):
             dtype=self.image_encoder.dtype
         )
         zero_image_emb = self.image_encoder(zero_img)[0]
-        zero_image_emb = zero_image_emb.tile((batch_size, 1))
+        zero_image_emb = mint.tile(zero_image_emb, (batch_size, 1))
         return zero_image_emb
 
     # Copied from diffusers.pipelines.kandinsky.pipeline_kandinsky_prior.KandinskyPriorPipeline._encode_prompt
@@ -324,11 +324,13 @@ class KandinskyV22PriorPipeline(DiffusionPipeline):
             # duplicate unconditional embeddings for each generation per prompt, using mps friendly method
 
             seq_len = negative_prompt_embeds.shape[1]
-            negative_prompt_embeds = negative_prompt_embeds.tile((1, num_images_per_prompt))
+            negative_prompt_embeds = mint.tile(negative_prompt_embeds, (1, num_images_per_prompt))
             negative_prompt_embeds = negative_prompt_embeds.view(batch_size * num_images_per_prompt, seq_len)
 
             seq_len = uncond_text_encoder_hidden_states.shape[1]
-            uncond_text_encoder_hidden_states = uncond_text_encoder_hidden_states.tile((1, num_images_per_prompt, 1))
+            uncond_text_encoder_hidden_states = mint.tile(
+                uncond_text_encoder_hidden_states, (1, num_images_per_prompt, 1)
+            )
             uncond_text_encoder_hidden_states = uncond_text_encoder_hidden_states.view(
                 batch_size * num_images_per_prompt, seq_len, -1
             )

@@ -185,11 +185,11 @@ class UnCLIPPipeline(DiffusionPipeline):
             # duplicate unconditional embeddings for each generation per prompt, using mps friendly method
 
             seq_len = negative_prompt_embeds.shape[1]
-            negative_prompt_embeds = negative_prompt_embeds.tile((1, num_images_per_prompt))
+            negative_prompt_embeds = mint.tile(negative_prompt_embeds, (1, num_images_per_prompt))
             negative_prompt_embeds = negative_prompt_embeds.view(batch_size * num_images_per_prompt, seq_len)
 
             seq_len = uncond_text_enc_hid_states.shape[1]
-            uncond_text_enc_hid_states = uncond_text_enc_hid_states.tile((1, num_images_per_prompt, 1))
+            uncond_text_enc_hid_states = mint.tile(uncond_text_enc_hid_states, (1, num_images_per_prompt, 1))
             uncond_text_enc_hid_states = uncond_text_enc_hid_states.view(
                 batch_size * num_images_per_prompt, seq_len, -1
             )

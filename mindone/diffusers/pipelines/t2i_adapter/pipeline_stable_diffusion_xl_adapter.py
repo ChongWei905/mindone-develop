@@ -446,7 +446,7 @@ class StableDiffusionXLAdapterPipeline(
 
         bs_embed, seq_len, _ = prompt_embeds.shape
         # duplicate text embeddings for each generation per prompt, using mps friendly method
-        prompt_embeds = prompt_embeds.tile((1, num_images_per_prompt, 1))
+        prompt_embeds = mint.tile(prompt_embeds, (1, num_images_per_prompt, 1))
         prompt_embeds = prompt_embeds.view(bs_embed * num_images_per_prompt, seq_len, -1)
 
         if do_classifier_free_guidance:
@@ -458,14 +458,14 @@ class StableDiffusionXLAdapterPipeline(
             else:
                 negative_prompt_embeds = negative_prompt_embeds.to(dtype=self.unet.dtype)
 
-            negative_prompt_embeds = negative_prompt_embeds.tile((1, num_images_per_prompt, 1))
+            negative_prompt_embeds = mint.tile(negative_prompt_embeds, (1, num_images_per_prompt, 1))
             negative_prompt_embeds = negative_prompt_embeds.view(batch_size * num_images_per_prompt, seq_len, -1)
 
-        pooled_prompt_embeds = pooled_prompt_embeds.tile((1, num_images_per_prompt)).view(
+        pooled_prompt_embeds = mint.tile(pooled_prompt_embeds, (1, num_images_per_prompt)).view(
             bs_embed * num_images_per_prompt, -1
         )
         if do_classifier_free_guidance:
-            negative_pooled_prompt_embeds = negative_pooled_prompt_embeds.tile((1, num_images_per_prompt)).view(
+            negative_pooled_prompt_embeds = mint.tile(negative_pooled_prompt_embeds, (1, num_images_per_prompt)).view(
                 bs_embed * num_images_per_prompt, -1
             )
 
@@ -541,16 +541,19 @@ class StableDiffusionXLAdapterPipeline(
             for single_image_embeds in ip_adapter_image_embeds:
                 if do_classifier_free_guidance:
                     single_negative_image_embeds, single_image_embeds = mint.chunk(single_image_embeds, 2)
-                    single_image_embeds = single_image_embeds.tile(
-                        (num_images_per_prompt, *(repeat_dims * len(single_image_embeds.shape[1:])))
+                    single_image_embeds = mint.tile(
+                        single_image_embeds,
+                        (num_images_per_prompt, *(repeat_dims * len(single_image_embeds.shape[1:]))),
                     )
-                    single_negative_image_embeds = single_negative_image_embeds.tile(
-                        (num_images_per_prompt, *(repeat_dims * len(single_negative_image_embeds.shape[1:])))
+                    single_negative_image_embeds = mint.tile(
+                        single_negative_image_embeds,
+                        (num_images_per_prompt, *(repeat_dims * len(single_negative_image_embeds.shape[1:]))),
                     )
                     single_image_embeds = mint.cat([single_negative_image_embeds, single_image_embeds])
                 else:
-                    single_image_embeds = single_image_embeds.tile(
-                        (num_images_per_prompt, *(repeat_dims * len(single_image_embeds.shape[1:])))
+                    single_image_embeds = mint.tile(
+                        single_image_embeds,
+                        (num_images_per_prompt, *(repeat_dims * len(single_image_embeds.shape[1:]))),
                     )
                 image_embeds.append(single_image_embeds)
 

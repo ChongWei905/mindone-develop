@@ -250,7 +250,7 @@ class CogVideoXVideoToVideoPipeline(DiffusionPipeline):
 
         # duplicate text embeddings for each generation per prompt, using mps friendly method
         _, seq_len, _ = prompt_embeds.shape
-        prompt_embeds = prompt_embeds.tile((1, num_videos_per_prompt, 1))
+        prompt_embeds = mint.tile(prompt_embeds, (1, num_videos_per_prompt, 1))
         prompt_embeds = prompt_embeds.view(batch_size * num_videos_per_prompt, seq_len, -1)
 
         return prompt_embeds
@@ -683,7 +683,7 @@ class CogVideoXVideoToVideoPipeline(DiffusionPipeline):
         # 4. Prepare timesteps
         timesteps, num_inference_steps = retrieve_timesteps(self.scheduler, num_inference_steps, timesteps)
         timesteps, num_inference_steps = self.get_timesteps(num_inference_steps, timesteps, strength)
-        latent_timestep = timesteps[:1].tile((batch_size * num_videos_per_prompt,))
+        latent_timestep = mint.tile(timesteps[:1], (batch_size * num_videos_per_prompt,))
         self._num_timesteps = len(timesteps)
 
         # 5. Prepare latents

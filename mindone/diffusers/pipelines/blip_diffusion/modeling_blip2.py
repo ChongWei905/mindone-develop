@@ -84,7 +84,7 @@ class Blip2TextEmbeddings(nn.Cell):
             if query_embeds is not None:
                 batch_size = embeddings.shape[0]
                 # repeat the query embeddings for batch size
-                query_embeds = query_embeds.tile((batch_size, 1, 1))
+                query_embeds = mint.tile(query_embeds, (batch_size, 1, 1))
                 embeddings = mint.cat((query_embeds, embeddings), dim=1)
         else:
             embeddings = query_embeds

@@ -985,7 +985,7 @@ class ShapERenderer(ModelMixin, ConfigMixin):
         # 3.1 query the SDF values at vertices along a regular 128**3 grid
 
         query_points = volume_query_points(self.volume, grid_size)
-        query_positions = query_points[None].tile((1, 1, 1)).to(dtype=self.mlp.dtype)
+        query_positions = mint.tile(query_points[None], (1, 1, 1)).to(dtype=self.mlp.dtype)
 
         fields = []
 

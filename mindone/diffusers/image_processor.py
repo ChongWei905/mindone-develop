@@ -758,7 +758,7 @@ class IPAdapterMaskProcessor(VaeImageProcessor):
 
         # Repeat batch_size times
         if mask_downsample.shape[0] < batch_size:
-            mask_downsample = mask_downsample.tile((batch_size, 1, 1))
+            mask_downsample = mint.tile(mask_downsample, (batch_size, 1, 1))
 
         mask_downsample = mask_downsample.view(mask_downsample.shape[0], -1)
 
@@ -774,8 +774,8 @@ class IPAdapterMaskProcessor(VaeImageProcessor):
             mask_downsample = mask_downsample[:, :num_queries]
 
         # Repeat last dimension to match SDPA output shape
-        mask_downsample = mask_downsample.view(mask_downsample.shape[0], mask_downsample.shape[1], 1).tile(
-            (1, 1, value_embed_dim)
+        mask_downsample = mint.tile(
+            mask_downsample.view(mask_downsample.shape[0], mask_downsample.shape[1], 1), (1, 1, value_embed_dim)
         )
 
         return mask_downsample

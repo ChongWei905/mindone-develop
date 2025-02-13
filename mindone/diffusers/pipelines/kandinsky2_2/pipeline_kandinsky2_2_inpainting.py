@@ -439,7 +439,7 @@ class KandinskyV22InpaintPipeline(DiffusionPipeline):
         mask_image = mask_image.repeat_interleave(num_images_per_prompt, dim=0)
         masked_image = masked_image.repeat_interleave(num_images_per_prompt, dim=0)
         if self.do_classifier_free_guidance:
-            mask_image = mask_image.tile((2, 1, 1, 1))
+            mask_image = mint.tile(mask_image, (2, 1, 1, 1))
             masked_image = masked_image.tile((2, 1, 1, 1))
 
         num_channels_latents = self.movq.config.latent_channels

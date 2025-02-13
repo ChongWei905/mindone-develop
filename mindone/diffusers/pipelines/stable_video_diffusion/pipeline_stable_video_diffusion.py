@@ -277,7 +277,7 @@ class StableVideoDiffusionPipeline(DiffusionPipeline):
 
     def decode_latents(self, latents: ms.Tensor, num_frames: int, decode_chunk_size: int = 14):
         # [batch, frames, channels, height, width] -> [batch*frames, channels, height, width]
-        latents = latents.flatten(start_dim=0, end_dim=1)
+        latents = mint.flatten(latents, start_dim=0, end_dim=1)
 
         latents = 1 / self.vae.config.scaling_factor * latents
 
@@ -356,7 +356,7 @@ class StableVideoDiffusionPipeline(DiffusionPipeline):
     def do_classifier_free_guidance(self):
         if isinstance(self.guidance_scale, (int, float)):
             return self.guidance_scale > 1
-        return self.guidance_scale.max() > 1
+        return mint.max(self.guidance_scale) > 1
 
     @property
     def num_timesteps(self):
@@ -686,7 +686,7 @@ def _gaussian(window_size: int, sigma):
 
     gauss = mint.exp(-x.pow(2.0) / (2 * sigma.pow(2.0)))
 
-    return gauss / gauss.sum(-1, keepdims=True)
+    return gauss / mint.sum(gauss, -1, keepdim=True)
 
 
 def _gaussian_blur2d(input, kernel_size, sigma):

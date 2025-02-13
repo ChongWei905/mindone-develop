@@ -535,7 +535,7 @@ class LoraModel(BaseTuner):
         U = U @ ops.diag(S)
         Vh = Vh[:new_rank, :]
         if clamp is not None:
-            dist = mint.cat([U.flatten(), Vh.flatten()])
+            dist = mint.cat([mint.flatten(U), mint.flatten(Vh)])
             # todo: unavailable mint interface torch.quantile
             hi_val = ops.quantile(dist, clamp)
             low_val = -hi_val

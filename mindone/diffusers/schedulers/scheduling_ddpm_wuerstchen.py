@@ -221,6 +221,6 @@ class DDPMWuerstchenScheduler(SchedulerMixin, ConfigMixin):
         return self.config.num_train_timesteps
 
     def previous_timestep(self, timestep):
-        index = (self.timesteps - timestep[0]).abs().argmin().item()
+        index = mint.argmin(mint.abs((self.timesteps - timestep[0]))).item()
         prev_t = self.timesteps[index + 1][None].broadcast_to((timestep.shape[0],))
         return prev_t

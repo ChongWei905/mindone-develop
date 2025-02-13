@@ -79,8 +79,8 @@ def rescale_noise_cfg(noise_cfg, noise_pred_text, guidance_rescale=0.0):
     Rescale `noise_cfg` according to `guidance_rescale`. Based on findings of [Common Diffusion Noise Schedules and
     Sample Steps are Flawed](https://arxiv.org/pdf/2305.08891.pdf). See Section 3.4
     """
-    std_text = noise_pred_text.std(axis=tuple(range(1, noise_pred_text.ndim)), keepdims=True)
-    std_cfg = noise_cfg.std(axis=tuple(range(1, noise_cfg.ndim)), keepdims=True)
+    std_text = mint.std(noise_pred_text, dim=tuple(range(1, noise_pred_text.ndim)), keepdim=True)
+    std_cfg = mint.std(noise_cfg, dim=tuple(range(1, noise_cfg.ndim)), keepdim=True)
     # rescale the results from guidance (fixes overexposure)
     noise_pred_rescaled = noise_cfg * (std_text / std_cfg)
     # mix with the original results from guidance by factor guidance_rescale to avoid "plain looking" images
@@ -176,7 +176,7 @@ def prepare_mask_and_masked_image(image, mask, height, width, return_image: bool
         #    raise ValueError("Image should be in [-1, 1] range")
 
         # Check mask is in [0, 1]
-        if mask.min() < 0 or mask.max() > 1:
+        if mint.min(mask) < 0 or mint.max(mask) > 1:
             raise ValueError("Mask should be in [0, 1] range")
 
         # Binarize mask
@@ -990,7 +990,7 @@ class StableDiffusionXLInpaintPipeline(
                 )
             )
 
-            num_inference_steps = (timesteps < discrete_timestep_cutoff).sum().item()
+            num_inference_steps = mint.sum(timesteps < discrete_timestep_cutoff).item()
             if self.scheduler.order == 2 and num_inference_steps % 2 == 0:
                 # if the scheduler is a 2nd order scheduler we might have to do +1
                 # because `num_inference_steps` might be even given that every timestep

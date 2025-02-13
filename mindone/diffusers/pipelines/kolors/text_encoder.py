@@ -200,7 +200,7 @@ class CoreAttention(nn.Cell):
         # change view [b * np, sq, sk]
         attention_probs = attention_probs.view(output_size[0] * output_size[1], output_size[2], -1)
         # matmul: [b * np, sq, hn]
-        context_layer = mint.bmm(attention_probs, value_layer.swapaxes(0, 1))
+        context_layer = mint.bmm(attention_probs, mint.swapaxes(value_layer, 0, 1))
         # change view [b, np, sq, hn]
         context_layer = context_layer.view(output_size)
         # [b, np, sq, hn] --> [sq, b, np, hn]
@@ -255,7 +255,7 @@ def apply_rotary_pos_emb(x: ms.Tensor, rope_cache: ms.Tensor) -> ms.Tensor:
         ],
         -1,
     )
-    x_out2 = x_out2.flatten(start_dim=3)
+    x_out2 = mint.flatten(x_out2, start_dim=3)
     return mint.cat((x_out2, x_pass), dim=-1)
 
 
@@ -651,7 +651,7 @@ class Embedding(nn.Cell):
         words_embeddings = self.word_embeddings(input_ids)
         embeddings = words_embeddings
         # Data format change to avoid explicit tranposes : [b s h] --> [s b h].
-        embeddings = embeddings.swapaxes(0, 1)
+        embeddings = mint.swapaxes(embeddings, 0, 1)
         # If the input flag for fp32 residual connection is set, convert for float.
         if self.fp32_residual_connection:
             embeddings = embeddings.float()
@@ -821,7 +821,7 @@ class ChatGLMModel(ChatGLMPreTrainedModel):
             rotary_pos_emb = rotary_pos_emb[position_ids]
         else:
             rotary_pos_emb = rotary_pos_emb[None, :seq_length]
-        rotary_pos_emb = rotary_pos_emb.swapaxes(0, 1)
+        rotary_pos_emb = mint.swapaxes(rotary_pos_emb, 0, 1)
 
         # Run encoder.
         hidden_states, presents, all_hidden_states, all_self_attentions = self.encoder(

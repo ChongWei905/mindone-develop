@@ -191,7 +191,7 @@ class MarigoldImageProcessor(ConfigMixin):
             raise ValueError(f"Invalid input type={type(image)}.")
         if not ops.is_floating_point(image):
             raise ValueError(f"Invalid input dtype={image.dtype}.")
-        if image.min().item() < 0.0 or image.max().item() > 1.0:
+        if mint.min(image).item() < 0.0 or mint.max(image).item() > 1.0:
             raise ValueError("Input image data is partially outside of the [0,1] range.")
 
     def preprocess(
@@ -550,7 +550,7 @@ class MarigoldImageProcessor(ConfigMixin):
 
         def visualize_uncertainty_one(img, idx=None):
             prefix = "Uncertainty" + (f"[{idx}]" if idx else "")
-            if img.min() < 0:
+            if mint.min(img) < 0:
                 raise ValueError(f"{prefix}: unexected data range, min={img.min()}.")
             img = mint.squeeze(img, 0).numpy()
             saturation_value = np.percentile(img, saturation_percentile)

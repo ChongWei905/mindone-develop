@@ -173,4 +173,4 @@ class WuerstchenPrior(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin, Peft
             else:
                 x = block(x)
         a, b = mint.chunk(self.out(x), 2, dim=1)
-        return (x_in - a) / ((1 - b).abs() + 1e-5)
+        return (x_in - a) / (mint.abs((1 - b)) + 1e-5)

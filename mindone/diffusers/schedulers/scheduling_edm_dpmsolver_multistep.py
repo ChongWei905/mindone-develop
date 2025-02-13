@@ -566,7 +566,7 @@ class EDMDPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
         if schedule_timesteps is None:
             schedule_timesteps = self.timesteps
 
-        index_candidates_num = (schedule_timesteps == timestep).sum()
+        index_candidates_num = mint.sum(schedule_timesteps == timestep)
 
         if index_candidates_num == 0:
             step_index = len(self.timesteps) - 1

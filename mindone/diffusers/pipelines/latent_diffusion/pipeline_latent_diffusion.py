@@ -367,7 +367,7 @@ class LDMBertAttention(nn.Cell):
         self.out_proj = nn.Dense(self.inner_dim, embed_dim)
 
     def _shape(self, tensor: ms.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).swapaxes(1, 2)
+        return mint.swapaxes(tensor.view(bsz, seq_len, self.num_heads, self.head_dim), 1, 2)
 
     def construct(
         self,
@@ -424,7 +424,7 @@ class LDMBertAttention(nn.Cell):
         value_states = value_states.view(*proj_shape)
 
         src_len = key_states.shape[1]
-        attn_weights = mint.bmm(query_states, key_states.swapaxes(1, 2))
+        attn_weights = mint.bmm(query_states, mint.swapaxes(key_states, 1, 2))
 
         if attn_weights.shape != (bsz * self.num_heads, tgt_len, src_len):
             raise ValueError(
@@ -472,7 +472,7 @@ class LDMBertAttention(nn.Cell):
             )
 
         attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
-        attn_output = attn_output.swapaxes(1, 2)
+        attn_output = mint.swapaxes(attn_output, 1, 2)
 
         # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
         # partitioned across GPUs when using tensor-parallelism.

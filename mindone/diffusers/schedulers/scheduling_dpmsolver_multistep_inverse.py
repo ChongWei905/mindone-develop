@@ -775,7 +775,7 @@ class DPMSolverMultistepInverseScheduler(SchedulerMixin, ConfigMixin):
         return x_t
 
     def _init_step_index(self, timestep):
-        index_candidates_num = (self.timesteps == timestep).sum()
+        index_candidates_num = mint.sum(self.timesteps == timestep)
 
         if index_candidates_num == 0:
             step_index = len(self.timesteps) - 1
@@ -901,7 +901,7 @@ class DPMSolverMultistepInverseScheduler(SchedulerMixin, ConfigMixin):
 
         step_indices = []
         for timestep in timesteps:
-            index_candidates_num = (schedule_timesteps == timestep).sum()
+            index_candidates_num = mint.sum(schedule_timesteps == timestep)
             if index_candidates_num == 0:
                 step_index = len(schedule_timesteps) - 1
             else:

@@ -176,9 +176,9 @@ class LMSDiscreteScheduler(SchedulerMixin, ConfigMixin):
     def init_noise_sigma(self):
         # standard deviation of the initial noise distribution
         if self.config.timestep_spacing in ["linspace", "trailing"]:
-            return self.sigmas.max()
+            return mint.max(self.sigmas)
 
-        return (self.sigmas.max() ** 2 + 1) ** 0.5
+        return (mint.max(self.sigmas) ** 2 + 1) ** 0.5
 
     @property
     def step_index(self):
@@ -305,7 +305,7 @@ class LMSDiscreteScheduler(SchedulerMixin, ConfigMixin):
         if schedule_timesteps is None:
             schedule_timesteps = self.timesteps
 
-        if (schedule_timesteps == timestep).sum() > 1:
+        if mint.sum(schedule_timesteps == timestep) > 1:
             pos = 1
         else:
             pos = 0

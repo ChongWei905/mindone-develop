@@ -178,11 +178,11 @@ def prepare_mask_and_masked_image(image, mask, height, width):
         assert image.shape[0] == mask.shape[0], "Image and Mask must have the same batch size"
 
         # Check image is in [-1, 1]
-        if image.min() < -1 or image.max() > 1:
+        if mint.min(image) < -1 or mint.max(image) > 1:
             raise ValueError("Image should be in [-1, 1] range")
 
         # Check mask is in [0, 1]
-        if mask.min() < 0 or mask.max() > 1:
+        if mint.min(mask) < 0 or mint.max(mask) > 1:
             raise ValueError("Mask should be in [0, 1] range")
 
         # Binarize mask

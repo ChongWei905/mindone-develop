@@ -178,7 +178,7 @@ class LattePipeline(DiffusionPipeline):
     # Adapted from https://github.com/PixArt-alpha/PixArt-alpha/blob/master/diffusion/model/utils.py
     def mask_text_embeddings(self, emb, mask):
         if emb.shape[0] == 1:
-            keep_index = mask.sum().item()
+            keep_index = mint.sum(mask).item()
             return emb[:, :, :keep_index, :], keep_index  # 1, 120, 4096 -> 1 7 4096
         else:
             masked_feature = emb * mask[:, None, :, None]  # 1 120 4096

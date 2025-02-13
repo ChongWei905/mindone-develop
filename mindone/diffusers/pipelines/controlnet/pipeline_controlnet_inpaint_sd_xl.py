@@ -991,7 +991,7 @@ class StableDiffusionXLControlNetInpaintPipeline(
                 )
             )
 
-            num_inference_steps = (timesteps < discrete_timestep_cutoff).sum().item()
+            num_inference_steps = mint.sum(timesteps < discrete_timestep_cutoff).item()
             if self.scheduler.order == 2 and num_inference_steps % 2 == 0:
                 # if the scheduler is a 2nd order scheduler we might have to do +1
                 # because `num_inference_steps` might be even given that every timestep

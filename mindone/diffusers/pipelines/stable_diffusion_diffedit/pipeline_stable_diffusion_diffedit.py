@@ -212,7 +212,7 @@ def preprocess_mask(mask, batch_size: int = 1):
         raise ValueError(f"`mask_image` must have 1 channel, but has {mask.shape[1]} channels")
 
     # Check mask is in [0, 1]
-    if mask.min() < 0 or mask.max() > 1:
+    if mint.min(mask) < 0 or mint.max(mask) > 1:
         raise ValueError("`mask_image` should be in [0, 1] range")
 
     # Binarize mask
@@ -1205,7 +1205,7 @@ class StableDiffusionDiffEditPipeline(
         # 8. Post-processing
         image = None
         if decode_latents:
-            image = self.decode_latents(latents.flatten(start_dim=0, end_dim=1))
+            image = self.decode_latents(mint.flatten(latents, start_dim=0, end_dim=1))
 
         # 9. Convert to PIL.
         if decode_latents and output_type == "pil":
@@ -1396,7 +1396,7 @@ class StableDiffusionDiffEditPipeline(
                 f" timesteps, but has batch size {image_latents.shape[0]} with latent images from"
                 f" {image_latents.shape[1]} timesteps."
             )
-        image_latents = image_latents.swapaxes(0, 1).repeat_interleave(num_images_per_prompt, dim=1)
+        image_latents = mint.swapaxes(image_latents, 0, 1).repeat_interleave(num_images_per_prompt, dim=1)
         image_latents = image_latents.to(prompt_embeds.dtype)
 
         # 7. Prepare extra step kwargs. TODO: Logic should ideally just be moved out of the pipeline

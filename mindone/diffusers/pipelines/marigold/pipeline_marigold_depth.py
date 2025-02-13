@@ -750,8 +750,8 @@ class MarigoldDepthPipeline(DiffusionPipeline):
 
             if regularizer_strength > 0:
                 prediction, _ = ensemble(depth_aligned, return_uncertainty=False)
-                err_near = (0.0 - prediction.min()).abs().item()
-                err_far = (1.0 - prediction.max()).abs().item()
+                err_near = mint.abs(0.0 - mint.min(prediction)).item()
+                err_far = mint.abs(1.0 - mint.max(prediction)).item()
                 cost += (err_near + err_far) * regularizer_strength
 
             return cost
@@ -784,9 +784,9 @@ class MarigoldDepthPipeline(DiffusionPipeline):
 
         depth, uncertainty = ensemble(depth, return_uncertainty=output_uncertainty)
 
-        depth_max = depth.max()
+        depth_max = mint.max(depth)
         if scale_invariant and shift_invariant:
-            depth_min = depth.min()
+            depth_min = mint.min(depth)
         elif scale_invariant:
             depth_min = 0
         else:

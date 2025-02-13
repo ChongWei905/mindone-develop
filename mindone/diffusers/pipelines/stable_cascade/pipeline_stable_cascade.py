@@ -166,7 +166,7 @@ class StableCascadeDecoderPipeline(DiffusionPipeline):
             )
             prompt_embeds = text_encoder_output[2][-1]
             if prompt_embeds_pooled is None:
-                prompt_embeds_pooled = text_encoder_output[0].unsqueeze(1)
+                prompt_embeds_pooled = mint.unsqueeze(text_encoder_output[0], 1)
 
         prompt_embeds = prompt_embeds.to(dtype=self.text_encoder.dtype)
         prompt_embeds_pooled = prompt_embeds_pooled.to(dtype=self.text_encoder.dtype)
@@ -207,7 +207,7 @@ class StableCascadeDecoderPipeline(DiffusionPipeline):
             )
 
             negative_prompt_embeds = negative_prompt_embeds_text_encoder_output[2][-1]
-            negative_prompt_embeds_pooled = negative_prompt_embeds_text_encoder_output[0].unsqueeze(1)
+            negative_prompt_embeds_pooled = mint.unsqueeze(negative_prompt_embeds_text_encoder_output[0], 1)
 
         if do_classifier_free_guidance:
             # duplicate unconditional embeddings for each generation per prompt, using mps friendly method
@@ -478,7 +478,7 @@ class StableCascadeDecoderPipeline(DiffusionPipeline):
             # 10. Scale and decode the image latents with vq-vae
             # TODO: check self.vqgan.decode(latents).sample.clamp(0, 1)
             latents = self.vqgan.config.scale_factor * latents
-            images = self.vqgan.decode(latents)[0].clamp(0, 1)
+            images = mint.clamp(self.vqgan.decode(latents)[0], 0, 1)
             if output_type == "np":
                 images = mint.permute(images, (0, 2, 3, 1)).float().asnumpy()  # float() as bfloat16-> numpy doesnt work
             elif output_type == "pil":

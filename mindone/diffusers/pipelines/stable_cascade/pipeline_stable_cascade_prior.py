@@ -183,7 +183,7 @@ class StableCascadePriorPipeline(DiffusionPipeline):
             )
             prompt_embeds = text_encoder_output[2][-1]
             if prompt_embeds_pooled is None:
-                prompt_embeds_pooled = text_encoder_output[0].unsqueeze(1)
+                prompt_embeds_pooled = mint.unsqueeze(text_encoder_output[0], 1)
 
         prompt_embeds = prompt_embeds.to(dtype=self.text_encoder.dtype)
         prompt_embeds_pooled = prompt_embeds_pooled.to(dtype=self.text_encoder.dtype)
@@ -224,7 +224,7 @@ class StableCascadePriorPipeline(DiffusionPipeline):
             )
 
             negative_prompt_embeds = negative_prompt_embeds_text_encoder_output[2][-1]
-            negative_prompt_embeds_pooled = negative_prompt_embeds_text_encoder_output[0].unsqueeze(1)
+            negative_prompt_embeds_pooled = mint.unsqueeze(negative_prompt_embeds_text_encoder_output[0], 1)
 
         if do_classifier_free_guidance:
             # duplicate unconditional embeddings for each generation per prompt, using mps friendly method
@@ -248,7 +248,7 @@ class StableCascadePriorPipeline(DiffusionPipeline):
         for image in images:
             image = self.feature_extractor(image, return_tensors="np").pixel_values
             image = ms.tensor(image, dtype=dtype)
-            image_embed = self.image_encoder(image)[0].unsqueeze(1)
+            image_embed = mint.unsqueeze(self.image_encoder(image)[0], 1)
             image_embeds.append(image_embed)
         image_embeds = mint.cat(image_embeds, dim=1)
 
@@ -354,7 +354,7 @@ class StableCascadePriorPipeline(DiffusionPipeline):
         clamp_range = [0, 1]
         min_var = mint.cos(s / (1 + s) * pi * 0.5) ** 2
         var = alphas_cumprod[t]
-        var = var.clamp(*clamp_range)
+        var = mint.clamp(var, *clamp_range)
         ratio = (((var * min_var) ** 0.5).acos() / (pi * 0.5)) * (1 + s) - s
         return ratio
 

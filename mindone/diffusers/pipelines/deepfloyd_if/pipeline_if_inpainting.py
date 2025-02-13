@@ -667,11 +667,11 @@ class IFInpaintingPipeline(DiffusionPipeline, LoraLoaderMixin):
             elif mask_image.ndim == 3 and mask_image.shape[0] == 1:
                 # Single mask, the 0'th dimension is considered to be
                 # the existing batch size of 1
-                mask_image = mask_image.unsqueeze(0)
+                mask_image = mint.unsqueeze(mask_image, 0)
             elif mask_image.ndim == 3 and mask_image.shape[0] != 1:
                 # Batch of mask, the 0'th dimension is considered to be
                 # the batching dimension
-                mask_image = mask_image.unsqueeze(1)
+                mask_image = mint.unsqueeze(mask_image, 1)
 
             mask_image[mask_image < 0.5] = 0
             mask_image[mask_image >= 0.5] = 1

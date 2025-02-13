@@ -68,7 +68,7 @@ class DifferentiableProjectiveCamera:
         inner_batch_size = int(np.prod(inner_shape))
 
         coords = self.get_image_coords()
-        coords = mint.broadcast_to(coords.unsqueeze(0), (batch_size * inner_batch_size, *coords.shape))
+        coords = mint.broadcast_to(mint.unsqueeze(coords, 0), (batch_size * inner_batch_size, *coords.shape))
         rays = self.get_camera_rays(coords)
 
         rays = rays.view(batch_size, inner_batch_size * self.height * self.width, 2, 3)

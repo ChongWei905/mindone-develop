@@ -184,7 +184,7 @@ class ContextCLIPTextTransformer(nn.Cell):
         mask = mint.zeros((bsz, seq_len, seq_len), dtype=dtype)
         mask = mask.fill(dtype_to_min(dtype))
         mask = mask.triu(1)  # zero out the lower diagonal
-        mask = mask.unsqueeze(1)  # expand mask
+        mask = mint.unsqueeze(mask, 1)  # expand mask
         return mask
 
 

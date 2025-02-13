@@ -232,11 +232,9 @@ class KandinskyPriorPipeline(DiffusionPipeline):
 
             elif isinstance(cond, (PIL.Image.Image, ms.Tensor)):
                 if isinstance(cond, PIL.Image.Image):
-                    cond = (
-                        ms.tensor(self.image_processor(cond, return_tensors="np").pixel_values[0])
-                        .unsqueeze(0)
-                        .to(dtype=self.image_encoder.dtype)
-                    )
+                    cond = mint.unsqueeze(
+                        ms.tensor(self.image_processor(cond, return_tensors="np").pixel_values[0]), 0
+                    ).to(dtype=self.image_encoder.dtype)
 
                 image_emb = self.image_encoder(cond)[0]
 

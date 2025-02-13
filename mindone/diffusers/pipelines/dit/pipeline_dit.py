@@ -219,7 +219,7 @@ class DiTPipeline(DiffusionPipeline):
         latents = 1 / self.vae.config.scaling_factor * latents
         samples = self.vae.decode(latents)[0]
 
-        samples = (samples / 2 + 0.5).clamp(0, 1)
+        samples = mint.clamp((samples / 2 + 0.5), 0, 1)
 
         # we always cast to float32 as this does not cause significant overhead and is compatible with bfloat16
         samples = mint.permute(samples, (0, 2, 3, 1)).float().asnumpy()

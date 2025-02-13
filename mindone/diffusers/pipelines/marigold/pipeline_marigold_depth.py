@@ -696,11 +696,11 @@ class MarigoldDepthPipeline(DiffusionPipeline):
             init_max = mint.max(mint.reshape(depth, (ensemble_size, -1)), dim=1)
 
             if scale_invariant and shift_invariant:
-                init_s = 1.0 / (init_max - init_min).clamp(min=1e-6)
+                init_s = 1.0 / mint.clamp((init_max - init_min), min=1e-6)
                 init_t = -init_s * init_min
                 param = mint.cat((init_s, init_t)).numpy()
             elif scale_invariant:
-                init_s = 1.0 / init_max.clamp(min=1e-6)
+                init_s = 1.0 / mint.clamp(init_max, min=1e-6)
                 param = init_s.numpy()
             else:
                 raise ValueError("Unrecognized alignment.")
@@ -791,7 +791,7 @@ class MarigoldDepthPipeline(DiffusionPipeline):
             depth_min = 0
         else:
             raise ValueError("Unrecognized alignment.")
-        depth_range = (depth_max - depth_min).clamp(min=1e-6)
+        depth_range = mint.clamp((depth_max - depth_min), min=1e-6)
         depth = (depth - depth_min) / depth_range
         if output_uncertainty:
             uncertainty /= depth_range

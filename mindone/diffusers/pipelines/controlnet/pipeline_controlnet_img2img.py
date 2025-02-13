@@ -101,7 +101,7 @@ def prepare_image(image):
     if isinstance(image, ms.Tensor):
         # Batch single image
         if image.ndim == 3:
-            image = image.unsqueeze(0)
+            image = mint.unsqueeze(image, 0)
 
         image = image.to(dtype=ms.float32)
     else:

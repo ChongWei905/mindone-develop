@@ -328,7 +328,7 @@ class I2VGenXLPipeline(DiffusionPipeline, StableDiffusionMixin):
 
         image = image.to(dtype=dtype)
         image_embeddings = self.image_encoder(image)[0]
-        image_embeddings = image_embeddings.unsqueeze(1)
+        image_embeddings = mint.unsqueeze(image_embeddings, 1)
 
         # duplicate image embeddings for each generation per prompt, using mps friendly method
         bs_embed, seq_len, _ = image_embeddings.shape
@@ -439,7 +439,7 @@ class I2VGenXLPipeline(DiffusionPipeline, StableDiffusionMixin):
         image_latents = image_latents * self.vae.config.scaling_factor
 
         # Add frames dimension to image latents
-        image_latents = image_latents.unsqueeze(2)
+        image_latents = mint.unsqueeze(image_latents, 2)
 
         # Append a position mask for each subsequent frame
         # after the intial image latent frame
@@ -737,7 +737,7 @@ def _convert_ms_to_pil(image: Union[ms.Tensor, List[ms.Tensor]]):
 
     if isinstance(image, ms.Tensor):
         if image.ndim == 3:
-            image = image.unsqueeze(0)
+            image = mint.unsqueeze(image, 0)
 
         image_numpy = VaeImageProcessor.ms_to_numpy(image)
         image_pil = VaeImageProcessor.numpy_to_pil(image_numpy)

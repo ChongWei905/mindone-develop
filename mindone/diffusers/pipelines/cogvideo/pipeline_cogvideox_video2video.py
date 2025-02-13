@@ -367,12 +367,12 @@ class CogVideoXVideoToVideoPipeline(DiffusionPipeline):
                     )
 
                 init_latents = [
-                    retrieve_latents(self.vae, self.vae.encode(video[i].unsqueeze(0))[0], generator[i])
+                    retrieve_latents(self.vae, self.vae.encode(mint.unsqueeze(video[i], 0))[0], generator[i])
                     for i in range(batch_size)
                 ]
             else:
                 init_latents = [
-                    retrieve_latents(self.vae, self.vae.encode(vid.unsqueeze(0))[0], generator) for vid in video
+                    retrieve_latents(self.vae, self.vae.encode(mint.unsqueeze(vid, 0))[0], generator) for vid in video
                 ]
 
             init_latents = mint.permute(mint.cat(init_latents, dim=0).to(dtype), (0, 2, 1, 3, 4))  # [B, F, C, H, W]

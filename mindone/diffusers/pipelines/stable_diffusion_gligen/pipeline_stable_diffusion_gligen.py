@@ -714,9 +714,9 @@ class StableDiffusionGLIGENPipeline(DiffusionPipeline, StableDiffusionMixin):
         masks[:n_objs] = 1
 
         repeat_batch = batch_size * num_images_per_prompt
-        boxes = boxes.unsqueeze(0).broadcast_to((repeat_batch, -1, -1)).copy()
-        text_embeddings = text_embeddings.unsqueeze(0).broadcast_to((repeat_batch, -1, -1)).copy()
-        masks = masks.unsqueeze(0).broadcast_to((repeat_batch, -1)).copy()
+        boxes = mint.broadcast_to(mint.unsqueeze(boxes, 0), (repeat_batch, -1, -1)).copy()
+        text_embeddings = mint.broadcast_to(mint.unsqueeze(text_embeddings, 0), (repeat_batch, -1, -1)).copy()
+        masks = mint.broadcast_to(mint.unsqueeze(masks, 0), (repeat_batch, -1)).copy()
         if do_classifier_free_guidance:
             repeat_batch = repeat_batch * 2
             boxes = mint.cat([boxes] * 2)

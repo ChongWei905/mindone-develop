@@ -114,7 +114,7 @@ def prepare_image(pil_image, w=512, h=512):
     arr = np.array(pil_image.convert("RGB"))
     arr = arr.astype(np.float32) / 127.5 - 1
     arr = np.transpose(arr, [2, 0, 1])
-    image = ms.Tensor.from_numpy(arr).unsqueeze(0)
+    image = mint.unsqueeze(ms.Tensor.from_numpy(arr), 0)
     return image
 
 
@@ -360,7 +360,7 @@ class KandinskyV22ControlnetImg2ImgPipeline(DiffusionPipeline):
 
         if output_type in ["np", "pil"]:
             image = image * 0.5 + 0.5
-            image = image.clamp(0, 1)
+            image = mint.clamp(image, 0, 1)
             image = mint.permute(image, (0, 2, 3, 1)).float().numpy()
 
         if output_type == "pil":

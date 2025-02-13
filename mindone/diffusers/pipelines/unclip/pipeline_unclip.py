@@ -402,7 +402,7 @@ class UnCLIPPipeline(DiffusionPipeline):
                 noise_pred, t, decoder_latents, prev_timestep=prev_timestep, generator=generator
             )[0]
 
-        decoder_latents = decoder_latents.clamp(-1, 1)
+        decoder_latents = mint.clamp(decoder_latents, -1, 1)
 
         image_small = decoder_latents
 
@@ -463,7 +463,7 @@ class UnCLIPPipeline(DiffusionPipeline):
 
         # post processing
         image = image * 0.5 + 0.5
-        image = image.clamp(0, 1)
+        image = mint.clamp(image, 0, 1)
         image = mint.permute(image, (0, 2, 3, 1)).float().numpy()
 
         if output_type == "pil":

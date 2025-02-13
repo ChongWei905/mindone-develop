@@ -207,7 +207,7 @@ class StableVideoDiffusionPipeline(DiffusionPipeline):
 
         image = ms.tensor(image).to(dtype=dtype)
         image_embeddings = self.image_encoder(image)[0]
-        image_embeddings = image_embeddings.unsqueeze(1)
+        image_embeddings = mint.unsqueeze(image_embeddings, 1)
 
         # duplicate image embeddings for each generation per prompt, using mps friendly method
         bs_embed, seq_len, _ = image_embeddings.shape
@@ -502,7 +502,7 @@ class StableVideoDiffusionPipeline(DiffusionPipeline):
 
         # Repeat the image latents for each frame so we can concatenate them with the noise
         # image_latents [batch, channels, height, width] ->[batch, num_frames, channels, height, width]
-        image_latents = image_latents.unsqueeze(1).tile((1, num_frames, 1, 1, 1))
+        image_latents = mint.tile(mint.unsqueeze(image_latents, 1), (1, num_frames, 1, 1, 1))
 
         # 5. Get Added Time IDs
         added_time_ids = self._get_add_time_ids(
@@ -532,9 +532,9 @@ class StableVideoDiffusionPipeline(DiffusionPipeline):
         )
 
         # 8. Prepare guidance scale
-        guidance_scale = ms.Tensor.from_numpy(
-            np.linspace(min_guidance_scale, max_guidance_scale, num_frames)
-        ).unsqueeze(0)
+        guidance_scale = mint.unsqueeze(
+            ms.Tensor.from_numpy(np.linspace(min_guidance_scale, max_guidance_scale, num_frames)), 0
+        )
         guidance_scale = guidance_scale.to(latents.dtype)
         guidance_scale = guidance_scale.tile((batch_size * num_videos_per_prompt, 1))
         guidance_scale = _append_dims(guidance_scale, latents.ndim)

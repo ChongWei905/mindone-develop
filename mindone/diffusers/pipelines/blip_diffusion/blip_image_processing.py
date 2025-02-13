@@ -304,7 +304,7 @@ class BlipImageProcessor(BaseImageProcessor):
             )
 
         # Equivalent to diffusers.VaeImageProcessor.denormalize
-        sample = (sample / 2 + 0.5).clamp(0, 1)
+        sample = mint.clamp((sample / 2 + 0.5), 0, 1)
         if output_type == "ms":
             return sample
 

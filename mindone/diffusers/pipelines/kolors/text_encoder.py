@@ -365,16 +365,17 @@ class SelfAttention(nn.Cell):
             kv_cache = None
 
         if self.multi_query_attention:
-            key_layer = key_layer.unsqueeze(-2)
+            key_layer = mint.unsqueeze(key_layer, -2)
             key_layer = key_layer.broadcast_to(
                 (-1, -1, -1, self.num_attention_heads_per_partition // self.num_multi_query_groups_per_partition, -1)
             )
             key_layer = key_layer.view(
                 key_layer.shape[:2] + (self.num_attention_heads_per_partition, self.hidden_size_per_attention_head)
             )
-            value_layer = value_layer.unsqueeze(-2)
-            value_layer = value_layer.broadcast_to(
-                (-1, -1, -1, self.num_attention_heads_per_partition // self.num_multi_query_groups_per_partition, -1)
+            value_layer = mint.unsqueeze(value_layer, -2)
+            value_layer = mint.broadcast_to(
+                value_layer,
+                (-1, -1, -1, self.num_attention_heads_per_partition // self.num_multi_query_groups_per_partition, -1),
             )
             value_layer = value_layer.view(
                 value_layer.shape[:2] + (self.num_attention_heads_per_partition, self.hidden_size_per_attention_head)
@@ -610,16 +611,16 @@ class ChatGLMPreTrainedModel(MSPreTrainedModel):
                 (mint.ones((batch_size, seq_length, past_length)), full_attention_mask), dim=-1
             )
         if padding_mask is not None:
-            full_attention_mask = full_attention_mask * padding_mask.unsqueeze(1)
+            full_attention_mask = full_attention_mask * mint.unsqueeze(padding_mask, 1)
         if not past_length and padding_mask is not None:
-            full_attention_mask -= padding_mask.unsqueeze(-1) - 1
+            full_attention_mask -= mint.unsqueeze(padding_mask, -1) - 1
         full_attention_mask = (full_attention_mask < 0.5).bool()
-        full_attention_mask = full_attention_mask.unsqueeze(1)
+        full_attention_mask = mint.unsqueeze(full_attention_mask, 1)
         return full_attention_mask
 
     def get_position_ids(self, input_ids):
         batch_size, seq_length = input_ids.shape
-        position_ids = mint.arange(seq_length, dtype=ms.int32).unsqueeze(0).tile((batch_size, 1))
+        position_ids = mint.tile(mint.unsqueeze(mint.arange(seq_length, dtype=ms.int32), 0), (batch_size, 1))
         return position_ids
 
     def _set_gradient_checkpointing(self, module, value=False):
@@ -770,7 +771,7 @@ class ChatGLMModel(ChatGLMPreTrainedModel):
         return self.embedding.word_embeddings
 
     def get_prompt(self, batch_size, dtype=ms.float16):
-        prefix_tokens = self.prefix_tokens.unsqueeze(0).broadcast_to((batch_size, -1))
+        prefix_tokens = mint.broadcast_to(mint.unsqueeze(self.prefix_tokens, 0), (batch_size, -1))
         past_key_values = self.prefix_encoder(prefix_tokens).type(dtype)
         past_key_values = past_key_values.view(
             batch_size, self.pre_seq_len, self.num_layers * 2, self.multi_query_group_num, self.kv_channels

@@ -352,16 +352,16 @@ class CogVideoXImageToVideoPipeline(DiffusionPipeline):
                 f" size of {batch_size}. Make sure the batch size matches the length of the generators."
             )
 
-        image = image.unsqueeze(2)  # [B, C, F, H, W]
+        image = mint.unsqueeze(image, 2)  # [B, C, F, H, W]
 
         if isinstance(generator, list):
             image_latents = [
-                retrieve_latents(self.vae, self.vae.encode(image[i].unsqueeze(0))[0], generator[i])
+                retrieve_latents(self.vae, self.vae.encode(mint.unsqueeze(image[i], 0))[0], generator[i])
                 for i in range(batch_size)
             ]
         else:
             image_latents = [
-                retrieve_latents(self.vae, self.vae.encode(img.unsqueeze(0))[0], generator) for img in image
+                retrieve_latents(self.vae, self.vae.encode(mint.unsqueeze(img, 0))[0], generator) for img in image
             ]
 
         image_latents = mint.permute(mint.cat(image_latents, dim=0).to(dtype), (0, 2, 1, 3, 4))  # [B, F, C, H, W]

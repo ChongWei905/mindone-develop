@@ -621,7 +621,7 @@ class MarigoldNormalsPipeline(DiffusionPipeline):
             raise ValueError(f"Expecting 4D tensor of shape [B,3,H,W]; got {normals.shape}.")
 
         norm = mint.norm(normals, dim=1, keepdim=True)
-        normals /= norm.clamp(min=eps)
+        normals /= mint.clamp(norm, min=eps)
 
         return normals
 

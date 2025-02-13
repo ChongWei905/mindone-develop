@@ -37,8 +37,8 @@ def _searchsorted(sorted_sequence, values, *, out_int32=False, right=False):
         ops.is_tensor(values) and sorted_sequence.ndim == values.ndim and sorted_sequence.shape[0] == values.shape[0]
     ), "Tensor sorted_sequence and values should have the same number of dimensions (ndim) and batch size."
 
-    values = values.unsqueeze(-1)
-    sorted_sequence = sorted_sequence.unsqueeze(-2)
+    values = mint.unsqueeze(values, -1)
+    sorted_sequence = mint.unsqueeze(sorted_sequence, -2)
     if not right:
         positions = mint.sum((values > sorted_sequence), dim=-1)
     else:
@@ -73,7 +73,7 @@ def sample_pmf(pmf: ms.Tensor, n_samples: int) -> ms.Tensor:
     # thus we use an equivalent implementation here.
     inds = _searchsorted(cdf, mint.rand(cdf.shape[0], n_samples), out_int32=True)
 
-    return inds.view(*shape, n_samples, 1).clamp(0, support_size - 1)
+    return mint.clamp(inds.view(*shape, n_samples, 1), 0, support_size - 1)
 
 
 def posenc_nerf(x: ms.Tensor, min_deg: int = 0, max_deg: int = 15) -> ms.Tensor:
@@ -413,12 +413,12 @@ class StratifiedRaySampler(nn.Cell):
         if self.depth_mode == "linear":
             ts = t0 * (1.0 - ts) + t1 * ts
         elif self.depth_mode == "geometric":
-            ts = (t0.clamp(epsilon).log() * (1.0 - ts) + t1.clamp(epsilon).log() * ts).exp()
+            ts = (mint.log(mint.clamp(t0, epsilon)) * (1.0 - ts) + mint.log(mint.clamp(t1, epsilon)) * ts).exp()
         elif self.depth_mode == "harmonic":
             # The original NeRF recommends this interpolation scheme for
             # spherical scenes, but there could be some weird edge cases when
             # the observer crosses from the inner to outer volume.
-            ts = 1.0 / (1.0 / t0.clamp(epsilon) * (1.0 - ts) + 1.0 / t1.clamp(epsilon) * ts)
+            ts = 1.0 / (1.0 / mint.clamp(t0, epsilon) * (1.0 - ts) + 1.0 / mint.clamp(t1, epsilon) * ts)
 
         mids = 0.5 * (ts[..., 1:] + ts[..., :-1])
         upper = mint.cat([mids, t1], dim=-1)
@@ -426,7 +426,7 @@ class StratifiedRaySampler(nn.Cell):
         t_rand = mint.rand_like(ts)
 
         ts = lower + (upper - lower) * t_rand
-        return ts.unsqueeze(-1)
+        return mint.unsqueeze(ts, -1)
 
 
 class ImportanceRaySampler(nn.Cell):
@@ -890,8 +890,8 @@ class ShapERenderer(ModelMixin, ConfigMixin):
         _, *ts_shape, _ts_dim = ts.shape
 
         # 2. Get the points along the ray and query the model
-        directions = mint.broadcast_to(direction.unsqueeze(-2), (batch_size, *ts_shape, 3))
-        positions = origin.unsqueeze(-2) + ts * directions
+        directions = mint.broadcast_to(mint.unsqueeze(direction, -2), (batch_size, *ts_shape, 3))
+        positions = mint.unsqueeze(origin, -2) + ts * directions
 
         directions = directions.to(self.mlp.dtype)
         positions = positions.to(self.mlp.dtype)

@@ -424,7 +424,7 @@ class WuerstchenDecoderPipeline(DiffusionPipeline):
         if not output_type == "latent":
             # 10. Scale and decode the image latents with vq-vae
             latents = (self.vqgan.config.scale_factor * latents).to(latents.dtype)
-            images = self.vqgan.decode(latents)[0].clamp(0, 1)
+            images = mint.clamp(self.vqgan.decode(latents)[0], 0, 1)
             if output_type == "np":
                 images = mint.permute(images, (0, 2, 3, 1)).float().numpy()
             elif output_type == "pil":

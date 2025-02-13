@@ -143,7 +143,7 @@ class StableDiffusionImageVariationPipeline(DiffusionPipeline, StableDiffusionMi
 
         image = image.to(dtype=dtype)
         image_embeddings = self.image_encoder(image)[0]
-        image_embeddings = image_embeddings.unsqueeze(1)
+        image_embeddings = mint.unsqueeze(image_embeddings, 1)
 
         # duplicate image embeddings for each generation per prompt, using mps friendly method
         bs_embed, seq_len, _ = image_embeddings.shape
@@ -182,7 +182,7 @@ class StableDiffusionImageVariationPipeline(DiffusionPipeline, StableDiffusionMi
 
         latents = 1 / self.vae.config.scaling_factor * latents
         image = self.vae.decode(latents, return_dict=False)[0]
-        image = (image / 2 + 0.5).clamp(0, 1)
+        image = mint.clamp((image / 2 + 0.5), 0, 1)
         # we always cast to float32 as this does not cause significant overhead and is compatible with bfloat16
         image = mint.permute(image, (0, 2, 3, 1)).float().numpy()
         return image

@@ -487,7 +487,7 @@ class StableDiffusionAdapterPipeline(DiffusionPipeline, StableDiffusionMixin):
 
         latents = 1 / self.vae.config.scaling_factor * latents
         image = self.vae.decode(latents, return_dict=False)[0]
-        image = (image / 2 + 0.5).clamp(0, 1)
+        image = mint.clamp((image / 2 + 0.5), 0, 1)
         # we always cast to float32 as this does not cause significant overhead and is compatible with bfloat16
         image = mint.permute(image, (0, 2, 3, 1)).float().numpy()
         return image

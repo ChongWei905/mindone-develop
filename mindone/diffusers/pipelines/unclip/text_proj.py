@@ -59,7 +59,7 @@ class UnCLIPTextProjModel(ModelMixin, ConfigMixin):
         if do_classifier_free_guidance:
             # Add the classifier free guidance embeddings to the image embeddings
             image_embeddings_batch_size = image_embeddings.shape[0]
-            classifier_free_guidance_embeddings = self.learned_classifier_free_guidance_embeddings.unsqueeze(0)
+            classifier_free_guidance_embeddings = mint.unsqueeze(self.learned_classifier_free_guidance_embeddings, 0)
             classifier_free_guidance_embeddings = classifier_free_guidance_embeddings.broadcast_to(
                 (image_embeddings_batch_size, -1)
             )

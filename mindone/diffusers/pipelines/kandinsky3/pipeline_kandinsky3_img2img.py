@@ -53,7 +53,7 @@ def prepare_image(pil_image):
     arr = np.array(pil_image.convert("RGB"))
     arr = arr.astype(np.float32) / 127.5 - 1
     arr = np.transpose(arr, [2, 0, 1])
-    image = ms.Tensor.from_numpy(arr).unsqueeze(0)
+    image = mint.unsqueeze(ms.Tensor.from_numpy(arr), 0)
     return image
 
 
@@ -167,7 +167,7 @@ class Kandinsky3Img2ImgPipeline(DiffusionPipeline, LoraLoaderMixin):
             )
             prompt_embeds = prompt_embeds[0]
             prompt_embeds, attention_mask = self._process_embeds(prompt_embeds, attention_mask, _cut_context)
-            prompt_embeds = prompt_embeds * attention_mask.unsqueeze(2)
+            prompt_embeds = prompt_embeds * mint.unsqueeze(attention_mask, 2)
 
         if self.text_encoder is not None:
             dtype = self.text_encoder.dtype
@@ -216,7 +216,7 @@ class Kandinsky3Img2ImgPipeline(DiffusionPipeline, LoraLoaderMixin):
                 negative_prompt_embeds = negative_prompt_embeds[0]
                 negative_prompt_embeds = negative_prompt_embeds[:, : prompt_embeds.shape[1]]
                 negative_attention_mask = negative_attention_mask[:, : prompt_embeds.shape[1]]
-                negative_prompt_embeds = negative_prompt_embeds * negative_attention_mask.unsqueeze(2)
+                negative_prompt_embeds = negative_prompt_embeds * mint.unsqueeze(negative_attention_mask, 2)
 
             else:
                 negative_prompt_embeds = mint.zeros_like(prompt_embeds)
@@ -606,7 +606,7 @@ class Kandinsky3Img2ImgPipeline(DiffusionPipeline, LoraLoaderMixin):
 
                 if output_type in ["np", "pil"]:
                     image = image * 0.5 + 0.5
-                    image = image.clamp(0, 1)
+                    image = mint.clamp(image, 0, 1)
                     image = mint.permute(image, (0, 2, 3, 1)).float().numpy()
 
                 if output_type == "pil":

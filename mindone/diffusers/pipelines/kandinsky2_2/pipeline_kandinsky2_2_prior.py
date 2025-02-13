@@ -184,25 +184,26 @@ class KandinskyV22PriorPipeline(DiffusionPipeline):
         image_embeddings = []
         for cond, weight in zip(images_and_prompts, weights):
             if isinstance(cond, str):
-                image_emb = self(
-                    cond,
-                    num_inference_steps=num_inference_steps,
-                    num_images_per_prompt=num_images_per_prompt,
-                    generator=generator,
-                    latents=latents,
-                    negative_prompt=negative_prior_prompt,
-                    guidance_scale=guidance_scale,
-                )[0].unsqueeze(0)
+                image_emb = mint.unsqueeze(
+                    self(
+                        cond,
+                        num_inference_steps=num_inference_steps,
+                        num_images_per_prompt=num_images_per_prompt,
+                        generator=generator,
+                        latents=latents,
+                        negative_prompt=negative_prior_prompt,
+                        guidance_scale=guidance_scale,
+                    )[0],
+                    0,
+                )
 
             elif isinstance(cond, (PIL.Image.Image, ms.Tensor)):
                 if isinstance(cond, PIL.Image.Image):
-                    cond = (
-                        ms.tensor(self.image_processor(cond, return_tensors="np").pixel_values[0])
-                        .unsqueeze(0)
-                        .to(dtype=self.image_encoder.dtype)
-                    )
+                    cond = mint.unsqueeze(
+                        ms.tensor(self.image_processor(cond, return_tensors="np").pixel_values[0]), 0
+                    ).to(dtype=self.image_encoder.dtype)
 
-                image_emb = self.image_encoder(cond)[0].tile((num_images_per_prompt, 1)).unsqueeze(0)
+                image_emb = mint.unsqueeze(mint.tile(self.image_encoder(cond)[0], (num_images_per_prompt, 1)), 0)
 
             else:
                 raise ValueError(

@@ -186,17 +186,17 @@ def preprocess_mask(mask, batch_size: int = 1):
 
     # Batch and add channel dim for single mask
     if mask.ndim == 2:
-        mask = mask.unsqueeze(0).unsqueeze(0)
+        mask = mint.unsqueeze(mint.unsqueeze(mask, 0), 0)
 
     # Batch single mask or add channel dim
     if mask.ndim == 3:
         # Single batched mask, no channel dim or single mask not batched but channel dim
         if mask.shape[0] == 1:
-            mask = mask.unsqueeze(0)
+            mask = mint.unsqueeze(mask, 0)
 
         # Batched masks no channel dim
         else:
-            mask = mask.unsqueeze(1)
+            mask = mint.unsqueeze(mask, 1)
 
     # Check mask shape
     if batch_size > 1:
@@ -609,7 +609,7 @@ class StableDiffusionDiffEditPipeline(
 
         latents = 1 / self.vae.config.scaling_factor * latents
         image = self.vae.decode(latents, return_dict=False)[0]
-        image = (image / 2 + 0.5).clamp(0, 1)
+        image = mint.clamp((image / 2 + 0.5), 0, 1)
         # we always cast to float32 as this does not cause significant overhead and is compatible with bfloat16
         image = mint.permute(image, (0, 2, 3, 1)).float().numpy()
         return image
@@ -1004,7 +1004,7 @@ class StableDiffusionDiffEditPipeline(
             [1, 2],
         )
         clamp_magnitude = mask_guidance_map.mean() * mask_thresholding_ratio
-        semantic_mask_image = mask_guidance_map.clamp(ms.Tensor(0), clamp_magnitude) / clamp_magnitude
+        semantic_mask_image = mint.clamp(mask_guidance_map, ms.Tensor(0), clamp_magnitude) / clamp_magnitude
         semantic_mask_image = mint.where(semantic_mask_image <= 0.5, ms.Tensor(0), ms.Tensor(1))
         mask_image = semantic_mask_image.asnumpy()
 

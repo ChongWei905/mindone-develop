@@ -331,11 +331,11 @@ class MarigoldImageProcessor(ConfigMixin):
             cmap = ms.Tensor(cmap, dtype=ms.float32)  # [K,3]
             K = cmap.shape[0]
 
-            pos = image.clamp(min=0, max=1) * (K - 1)
+            pos = mint.clamp(image, min=0, max=1) * (K - 1)
             left = pos.long()
-            right = (left + 1).clamp(max=K - 1)
+            right = mint.clamp((left + 1), max=K - 1)
 
-            d = (pos - left.float()).unsqueeze(-1)
+            d = mint.unsqueeze((pos - left.float()), -1)
             left_colors = cmap[left]
             right_colors = cmap[right]
 

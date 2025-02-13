@@ -586,7 +586,7 @@ class StableDiffusionGLIGENTextImagePipeline(DiffusionPipeline, StableDiffusionM
             feature = outputs[0]
             feature = mint.squeeze(self.image_project(feature), 0)
             feature = (feature / feature.norm()) * normalize_constant
-            feature = feature.unsqueeze(0)
+            feature = mint.unsqueeze(feature, 0)
         else:
             if input is None:
                 return None
@@ -641,13 +641,13 @@ class StableDiffusionGLIGENTextImagePipeline(DiffusionPipeline, StableDiffusionM
                 image_masks[idx] = 1
 
         input_phrases_mask = self.complete_mask(input_phrases_mask, max_objs)
-        phrases_masks = phrases_masks.unsqueeze(0).tile((repeat_batch, 1)) * input_phrases_mask
+        phrases_masks = mint.tile(mint.unsqueeze(phrases_masks, 0), (repeat_batch, 1)) * input_phrases_mask
         input_images_mask = self.complete_mask(input_images_mask, max_objs)
-        image_masks = image_masks.unsqueeze(0).tile((repeat_batch, 1)) * input_images_mask
-        boxes = boxes.unsqueeze(0).tile((repeat_batch, 1, 1))
-        masks = masks.unsqueeze(0).tile((repeat_batch, 1))
-        phrases_embeddings = phrases_embeddings.unsqueeze(0).tile((repeat_batch, 1, 1))
-        image_embeddings = image_embeddings.unsqueeze(0).tile((repeat_batch, 1, 1))
+        image_masks = mint.tile(mint.unsqueeze(image_masks, 0), (repeat_batch, 1)) * input_images_mask
+        boxes = mint.tile(mint.unsqueeze(boxes, 0), (repeat_batch, 1, 1))
+        masks = mint.tile(mint.unsqueeze(masks, 0), (repeat_batch, 1))
+        phrases_embeddings = mint.tile(mint.unsqueeze(phrases_embeddings, 0), (repeat_batch, 1, 1))
+        image_embeddings = mint.tile(mint.unsqueeze(image_embeddings, 0), (repeat_batch, 1, 1))
 
         out = {
             "boxes": boxes,
@@ -673,12 +673,12 @@ class StableDiffusionGLIGENTextImagePipeline(DiffusionPipeline, StableDiffusionM
         image_embeddings = mint.zeros((max_objs, hidden_size), dtype=self.text_encoder.dtype)
 
         out = {
-            "boxes": boxes.unsqueeze(0).tile((repeat_batch, 1, 1)),
-            "masks": masks.unsqueeze(0).tile((repeat_batch, 1)),
-            "phrases_masks": phrases_masks.unsqueeze(0).tile((repeat_batch, 1)),
-            "image_masks": image_masks.unsqueeze(0).tile((repeat_batch, 1)),
-            "phrases_embeddings": phrases_embeddings.unsqueeze(0).tile((repeat_batch, 1, 1)),
-            "image_embeddings": image_embeddings.unsqueeze(0).tile((repeat_batch, 1, 1)),
+            "boxes": mint.tile(mint.unsqueeze(boxes, 0), (repeat_batch, 1, 1)),
+            "masks": mint.tile(mint.unsqueeze(masks, 0), (repeat_batch, 1)),
+            "phrases_masks": mint.tile(mint.unsqueeze(phrases_masks, 0), (repeat_batch, 1)),
+            "image_masks": mint.tile(mint.unsqueeze(image_masks, 0), (repeat_batch, 1)),
+            "phrases_embeddings": mint.tile(mint.unsqueeze(phrases_embeddings, 0), (repeat_batch, 1, 1)),
+            "image_embeddings": mint.tile(mint.unsqueeze(image_embeddings, 0), (repeat_batch, 1, 1)),
         }
 
         return out

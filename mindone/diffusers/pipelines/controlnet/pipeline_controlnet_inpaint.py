@@ -162,21 +162,21 @@ def prepare_mask_and_masked_image(image, mask, height, width, return_image=False
         # Batch single image
         if image.ndim == 3:
             assert image.shape[0] == 3, "Image outside a batch should be of shape (3, H, W)"
-            image = image.unsqueeze(0)
+            image = mint.unsqueeze(image, 0)
 
         # Batch and add channel dim for single mask
         if mask.ndim == 2:
-            mask = mask.unsqueeze(0).unsqueeze(0)
+            mask = mint.unsqueeze(mint.unsqueeze(mask, 0), 0)
 
         # Batch single mask or add channel dim
         if mask.ndim == 3:
             # Single batched mask, no channel dim or single mask not batched but channel dim
             if mask.shape[0] == 1:
-                mask = mask.unsqueeze(0)
+                mask = mint.unsqueeze(mask, 0)
 
             # Batched masks no channel dim
             else:
-                mask = mask.unsqueeze(1)
+                mask = mint.unsqueeze(mask, 1)
 
         assert image.ndim == 4 and mask.ndim == 4, "Image and Mask must have 4 dimensions"
         assert image.shape[-2:] == mask.shape[-2:], "Image and Mask must have the same spatial dimensions"
@@ -663,7 +663,7 @@ class StableDiffusionControlNetInpaintPipeline(
 
         latents = 1 / self.vae.config.scaling_factor * latents
         image = self.vae.decode(latents, return_dict=False)[0]
-        image = (image / 2 + 0.5).clamp(0, 1)
+        image = mint.clamp((image / 2 + 0.5), 0, 1)
         # we always cast to float32 as this does not cause significant overhead and is compatible with bfloat16
         image = mint.permute(image, (0, 2, 3, 1)).float().numpy()
         return image

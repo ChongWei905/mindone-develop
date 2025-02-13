@@ -129,18 +129,21 @@ class KandinskyV22PriorEmb2EmbPipeline(DiffusionPipeline):
         image_embeddings = []
         for cond, weight in zip(images_and_prompts, weights):
             if isinstance(cond, str):
-                image_emb = self(
-                    cond,
-                    num_inference_steps=num_inference_steps,
-                    num_images_per_prompt=num_images_per_prompt,
-                    generator=generator,
-                    latents=latents,
-                    negative_prompt=negative_prior_prompt,
-                    guidance_scale=guidance_scale,
-                )[0].unsqueeze(0)
+                image_emb = mint.unsqueeze(
+                    self(
+                        cond,
+                        num_inference_steps=num_inference_steps,
+                        num_images_per_prompt=num_images_per_prompt,
+                        generator=generator,
+                        latents=latents,
+                        negative_prompt=negative_prior_prompt,
+                        guidance_scale=guidance_scale,
+                    )[0],
+                    0,
+                )
 
             elif isinstance(cond, (PIL.Image.Image, ms.Tensor)):
-                image_emb = self._encode_image(cond, num_images_per_prompt=num_images_per_prompt).unsqueeze(0)
+                image_emb = mint.unsqueeze(self._encode_image(cond, num_images_per_prompt=num_images_per_prompt), 0)
 
             else:
                 raise ValueError(
@@ -394,7 +397,7 @@ class KandinskyV22PriorEmb2EmbPipeline(DiffusionPipeline):
         elif isinstance(image, ms.Tensor) and image.ndim != 4:
             raise ValueError(
                 f" if pass `image` as pytorch tensor, or a list of pytorch tensor, "
-                f"please make sure each tensor has shape [batch_size, channels, height, width], currently {image[0].unsqueeze(0).shape}"
+                f"please make sure each tensor has shape [batch_size, channels, height, width], currently {mint.unsqueeze(image[0], 0).shape}"
             )
         else:
             image_embeds = self._encode_image(image, num_images_per_prompt)

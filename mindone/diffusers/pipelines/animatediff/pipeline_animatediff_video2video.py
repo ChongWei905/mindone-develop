@@ -654,12 +654,12 @@ class AnimateDiffVideoToVideoPipeline(
                     )
 
                 init_latents = [
-                    retrieve_latents(self.vae, self.vae.encode(video[i])[0], generator).unsqueeze(0)
+                    mint.unsqueeze(retrieve_latents(self.vae, self.vae.encode(video[i])[0], generator), 0)
                     for i in range(batch_size)
                 ]
             else:
                 init_latents = [
-                    retrieve_latents(self.vae, self.vae.encode(vid)[0], generator).unsqueeze(0) for vid in video
+                    mint.unsqueeze(retrieve_latents(self.vae, self.vae.encode(vid)[0], generator), 0) for vid in video
                 ]
 
             init_latents = mint.cat(init_latents, dim=0)

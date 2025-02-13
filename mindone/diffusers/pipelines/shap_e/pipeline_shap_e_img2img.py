@@ -136,7 +136,7 @@ class ShapEImg2ImgPipeline(DiffusionPipeline):
 
         if not isinstance(image, ms.Tensor):
             image = self.image_processor(image, return_tensors="np").pixel_values[0]
-            image = ms.Tensor.from_numpy(image).unsqueeze(0)
+            image = mint.unsqueeze(ms.Tensor.from_numpy(image), 0)
 
         image = image.to(dtype=self.image_encoder.dtype)
 

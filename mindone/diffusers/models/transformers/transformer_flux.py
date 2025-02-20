@@ -16,7 +16,7 @@
 from typing import Any, Dict, List, Optional, Union
 
 import mindspore as ms
-from mindspore import nn, ops
+from mindspore import mint, nn, ops
 
 from ...configuration_utils import ConfigMixin, register_to_config
 from ...loaders import FromOriginalModelMixin, PeftAdapterMixin
@@ -32,16 +32,15 @@ from ..modeling_outputs import Transformer2DModelOutput
 def rope(pos: ms.Tensor, dim: int, theta: int) -> ms.Tensor:
     assert dim % 2 == 0, "The dimension must be even."
 
-    scale = ops.arange(0, dim, 2, dtype=ms.float64) / dim
+    scale = mint.arange(0, dim, 2, dtype=ms.float64) / dim
     omega = 1.0 / (theta**scale)
 
     batch_size, seq_length = pos.shape
-    # out = ops.einsum("...n,d->...nd", pos, omega)
-    out = pos.expand_dims(-1) * omega.expand_dims(-2)
-    cos_out = ops.cos(out)
-    sin_out = ops.sin(out)
+    out = mint.einsum("...n,d->...nd", pos, omega)
+    cos_out = mint.cos(out)
+    sin_out = mint.sin(out)
 
-    stacked_out = ops.stack([cos_out, -sin_out, sin_out, cos_out], axis=-1)
+    stacked_out = mint.stack([cos_out, -sin_out, sin_out, cos_out], dim=-1)
     out = stacked_out.view(batch_size, -1, dim // 2, 2, 2)
     return out.float()
 
@@ -56,11 +55,11 @@ class EmbedND(nn.Cell):
 
     def construct(self, ids: ms.Tensor) -> ms.Tensor:
         n_axes = ids.shape[-1]
-        emb = ops.cat(
+        emb = mint.cat(
             [rope(ids[..., i], self.axes_dim[i], self.theta) for i in range(n_axes)],
-            axis=-3,
+            dim=-3,
         )
-        return emb.unsqueeze(1)
+        return mint.unsqueeze(emb, 1)
 
 
 class FluxSingleTransformerBlock(nn.Cell):
@@ -82,9 +81,9 @@ class FluxSingleTransformerBlock(nn.Cell):
         self.mlp_hidden_dim = int(dim * mlp_ratio)
 
         self.norm = AdaLayerNormZeroSingle(dim)
-        self.proj_mlp = nn.Dense(dim, self.mlp_hidden_dim)
-        self.act_mlp = nn.GELU(approximate=True)
-        self.proj_out = nn.Dense(dim + self.mlp_hidden_dim, dim)
+        self.proj_mlp = mint.nn.Linear(dim, self.mlp_hidden_dim)
+        self.act_mlp = _GELU(approximate="tanh")
+        self.proj_out = mint.nn.Linear(dim + self.mlp_hidden_dim, dim)
 
         processor = FluxSingleAttnProcessor2_0()
         self.attn = Attention(
@@ -115,8 +114,8 @@ class FluxSingleTransformerBlock(nn.Cell):
             image_rotary_emb=image_rotary_emb,
         )
 
-        hidden_states = ops.cat([attn_output, mlp_hidden_states], axis=2)
-        gate = gate.unsqueeze(1)
+        hidden_states = mint.cat([attn_output, mlp_hidden_states], dim=2)
+        gate = mint.unsqueeze(gate, 1)
         hidden_states = gate * self.proj_out(hidden_states)
         hidden_states = residual + hidden_states
         if hidden_states.dtype == ms.float16:
@@ -195,27 +194,27 @@ class FluxTransformerBlock(nn.Cell):
         )
 
         # Process attention outputs for the `hidden_states`.
-        attn_output = gate_msa.unsqueeze(1) * attn_output
+        attn_output = mint.unsqueeze(gate_msa, 1) * attn_output
         hidden_states = hidden_states + attn_output
 
         norm_hidden_states = self.norm2(hidden_states)
         norm_hidden_states = norm_hidden_states * (1 + scale_mlp[:, None]) + shift_mlp[:, None]
 
         ff_output = self.ff(norm_hidden_states)
-        ff_output = gate_mlp.unsqueeze(1) * ff_output
+        ff_output = mint.unsqueeze(gate_mlp, 1) * ff_output
 
         hidden_states = hidden_states + ff_output
 
         # Process attention outputs for the `encoder_hidden_states`.
 
-        context_attn_output = c_gate_msa.unsqueeze(1) * context_attn_output
+        context_attn_output = mint.unsqueeze(c_gate_msa, 1) * context_attn_output
         encoder_hidden_states = encoder_hidden_states + context_attn_output
 
         norm_encoder_hidden_states = self.norm2_context(encoder_hidden_states)
         norm_encoder_hidden_states = norm_encoder_hidden_states * (1 + c_scale_mlp[:, None]) + c_shift_mlp[:, None]
 
         context_ff_output = self.ff_context(norm_encoder_hidden_states)
-        encoder_hidden_states = encoder_hidden_states + c_gate_mlp.unsqueeze(1) * context_ff_output
+        encoder_hidden_states = encoder_hidden_states + mint.unsqueeze(c_gate_mlp, 1) * context_ff_output
         if encoder_hidden_states.dtype == ms.float16:
             encoder_hidden_states = encoder_hidden_states.clip(-65504, 65504)
 
@@ -268,8 +267,8 @@ class FluxTransformer2DModel(ModelMixin, ConfigMixin, PeftAdapterMixin, FromOrig
             embedding_dim=self.inner_dim, pooled_projection_dim=self.config.pooled_projection_dim
         )
 
-        self.context_embedder = nn.Dense(self.config.joint_attention_dim, self.inner_dim)
-        self.x_embedder = nn.Dense(self.config.in_channels, self.inner_dim)
+        self.context_embedder = mint.nn.Linear(self.config.joint_attention_dim, self.inner_dim)
+        self.x_embedder = mint.nn.Linear(self.config.in_channels, self.inner_dim)
 
         self.transformer_blocks = nn.CellList(
             [
@@ -294,7 +293,7 @@ class FluxTransformer2DModel(ModelMixin, ConfigMixin, PeftAdapterMixin, FromOrig
         )
 
         self.norm_out = AdaLayerNormContinuous(self.inner_dim, self.inner_dim, elementwise_affine=False, eps=1e-6)
-        self.proj_out = nn.Dense(self.inner_dim, patch_size * patch_size * self.out_channels, has_bias=True)
+        self.proj_out = mint.nn.Linear(self.inner_dim, patch_size * patch_size * self.out_channels, bias=True)
 
         self._gradient_checkpointing = False
 
@@ -372,7 +371,7 @@ class FluxTransformer2DModel(ModelMixin, ConfigMixin, PeftAdapterMixin, FromOrig
         )
         encoder_hidden_states = self.context_embedder(encoder_hidden_states)
 
-        ids = ops.cat((txt_ids, img_ids), axis=1)
+        ids = mint.cat((txt_ids, img_ids), dim=1)
         image_rotary_emb = self.pos_embed(ids)
 
         for index_block, block in enumerate(self.transformer_blocks):
@@ -383,7 +382,7 @@ class FluxTransformer2DModel(ModelMixin, ConfigMixin, PeftAdapterMixin, FromOrig
                 image_rotary_emb=image_rotary_emb,
             )
 
-        hidden_states = ops.cat([encoder_hidden_states, hidden_states], axis=1)
+        hidden_states = mint.cat([encoder_hidden_states, hidden_states], dim=1)
 
         for index_block, block in enumerate(self.single_transformer_blocks):
             hidden_states = block(
@@ -401,3 +400,12 @@ class FluxTransformer2DModel(ModelMixin, ConfigMixin, PeftAdapterMixin, FromOrig
             return (output,)
 
         return Transformer2DModelOutput(sample=output)
+
+
+class _GELU(nn.Cell):
+    def __init__(self, approximate: str = "none") -> None:
+        super().__init__()
+        self.approximate = approximate
+
+    def construct(self, input: ms.Tensor) -> ms.Tensor:
+        return mint.nn.functional.gelu(input, approximate=self.approximate)

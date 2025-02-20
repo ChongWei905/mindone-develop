@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import mindspore as ms
-from mindspore import nn
+from mindspore import mint, nn
 
 from ..configuration_utils import ConfigMixin, register_to_config
 from ..loaders import PeftAdapterMixin
@@ -25,7 +25,7 @@ from ..models.attention import JointTransformerBlock
 from ..models.attention_processor import AttentionProcessor
 from ..models.modeling_utils import ModelMixin
 from ..utils import logging
-from .controlnet import BaseOutput
+from .controlnet import BaseOutput, zero_module
 from .embeddings import CombinedTimestepTextProjEmbeddings, PatchEmbed
 from .transformers.transformer_2d import Transformer2DModelOutput
 
@@ -71,7 +71,7 @@ class SD3ControlNetModel(ModelMixin, ConfigMixin, PeftAdapterMixin):
         self.time_text_embed = CombinedTimestepTextProjEmbeddings(
             embedding_dim=self.inner_dim, pooled_projection_dim=pooled_projection_dim
         )
-        self.context_embedder = nn.Dense(joint_attention_dim, caption_projection_dim)
+        self.context_embedder = mint.nn.Linear(joint_attention_dim, caption_projection_dim)
 
         # `attention_head_dim` is doubled to account for the mixing.
         # It needs to crafted when we get the actual checkpoints.
@@ -90,24 +90,21 @@ class SD3ControlNetModel(ModelMixin, ConfigMixin, PeftAdapterMixin):
         # controlnet_blocks
         self.controlnet_blocks = []
         for _ in range(len(self.transformer_blocks)):
-            controlnet_block = nn.Dense(
-                self.inner_dim,
-                self.inner_dim,
-                weight_init="zeros",
-                bias_init="zeros",
-            )  # zero_module
+            controlnet_block = mint.nn.Linear(self.inner_dim, self.inner_dim)
+            controlnet_block = zero_module(controlnet_block)
             self.controlnet_blocks.append(controlnet_block)
         self.controlnet_blocks = nn.CellList(self.controlnet_blocks)
 
-        self.pos_embed_input = PatchEmbed(
+        pos_embed_input = PatchEmbed(
             height=sample_size,
             width=sample_size,
             patch_size=patch_size,
             in_channels=in_channels,
             embed_dim=self.inner_dim,
             pos_embed_type=None,
-            zero_module=True,
-        )  # zero module, FIXME: only conv2d zero
+            zero_module=False,
+        )
+        self.pos_embed_input = zero_module(pos_embed_input)
 
         self.gradient_checkpointing = False
 

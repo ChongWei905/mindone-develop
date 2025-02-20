@@ -20,7 +20,7 @@ import PIL.Image
 from PIL import Image, ImageFilter, ImageOps
 
 import mindspore as ms
-from mindspore import ops
+from mindspore import mint
 
 from .configuration_utils import ConfigMixin, register_to_config
 from .utils import CONFIG_NAME, PIL_INTERPOLATION, deprecate
@@ -144,7 +144,7 @@ class VaeImageProcessor(ConfigMixin):
         """
         Convert a MindSpore tensor to a NumPy image.
         """
-        images = images.permute(0, 2, 3, 1).float().numpy()
+        images = mint.permute(images, (0, 2, 3, 1)).float().numpy()
         return images
 
     @staticmethod
@@ -159,7 +159,7 @@ class VaeImageProcessor(ConfigMixin):
         """
         Denormalize an image array to [0,1].
         """
-        return (images / 2 + 0.5).clamp(0, 1)
+        return mint.clamp((images / 2 + 0.5), 0, 1)
 
     @staticmethod
     def convert_to_rgb(image: PIL.Image.Image) -> PIL.Image.Image:
@@ -392,13 +392,13 @@ class VaeImageProcessor(ConfigMixin):
                 raise ValueError(f"resize_mode {resize_mode} is not supported")
 
         elif isinstance(image, ms.Tensor):
-            image = ops.interpolate(
+            image = mint.nn.functional.interpolate(
                 image,
                 size=(height, width),
             )
         elif isinstance(image, np.ndarray):
             image = self.numpy_to_ms(image)
-            image = ops.interpolate(
+            image = mint.nn.functional.interpolate(
                 image,
                 size=(height, width),
             )
@@ -506,7 +506,7 @@ class VaeImageProcessor(ConfigMixin):
                 #    2. channnel x height x width: we should insert batch dimension at position 0,
                 #       however, since both channel and batch dimension has same size 1, it is same to insert at position 1
                 #    for simplicity, we insert a dimension of size 1 at position 1 for both cases
-                image = image.unsqueeze(1)
+                image = mint.unsqueeze(image, 1)
             else:
                 # if it is a numpy array, it could have 2 possible shapes:
                 #   1. batch x height x width: insert channel dimension on last position
@@ -529,7 +529,7 @@ class VaeImageProcessor(ConfigMixin):
                 "Please concatenate the list along the batch dimension and pass it as a single 4d torch.Tensor",
                 FutureWarning,
             )
-            image = ops.cat(image, axis=0)
+            image = mint.cat(image, dim=0)
 
         if not is_valid_image_imagelist(image):
             raise ValueError(
@@ -561,10 +561,10 @@ class VaeImageProcessor(ConfigMixin):
                 image = self.resize(image, height, width)
 
         elif isinstance(image[0], ms.Tensor):
-            image = ops.cat(image, axis=0) if image[0].ndim == 4 else ops.stack(image, axis=0)
+            image = mint.cat(image, dim=0) if image[0].ndim == 4 else mint.stack(image, dim=0)
 
             if self.config.do_convert_grayscale and image.ndim == 3:
-                image = image.unsqueeze(1)
+                image = mint.unsqueeze(image, 1)
 
             channel = image.shape[1]
             # don't need any preprocess if the image is latents
@@ -577,7 +577,7 @@ class VaeImageProcessor(ConfigMixin):
 
         # expected range [0,1], normalize to [-1,1]
         do_normalize = self.config.do_normalize
-        if do_normalize and image.min() < 0:
+        if do_normalize and mint.min(image) < 0:
             warnings.warn(
                 "Passing `image` as torch tensor with value range in [-1,1] is deprecated. The expected value range for image tensor is [0,1] "
                 f"when passing as mindspore tensor or numpy Array. You passed `image` with value range [{image.min()},{image.max()}]",
@@ -632,7 +632,7 @@ class VaeImageProcessor(ConfigMixin):
         if do_denormalize is None:
             do_denormalize = [self.config.do_normalize] * image.shape[0]
 
-        image = ops.stack(
+        image = mint.stack(
             [self.denormalize(image[i]) if do_denormalize[i] else image[i] for i in range(image.shape[0])]
         )
 
@@ -752,11 +752,13 @@ class IPAdapterMaskProcessor(VaeImageProcessor):
         mask_h = int(mask_h) + int((num_queries % int(mask_h)) != 0)
         mask_w = num_queries // mask_h
 
-        mask_downsample = ops.interpolate(mask.unsqueeze(0), size=(mask_h, mask_w), mode="bicubic").squeeze(0)
+        mask_downsample = mint.squeeze(
+            mint.nn.functional.interpolate(mint.unsqueeze(mask, 0), size=(mask_h, mask_w), mode="bicubic"), 0
+        )
 
         # Repeat batch_size times
         if mask_downsample.shape[0] < batch_size:
-            mask_downsample = mask_downsample.tile((batch_size, 1, 1))
+            mask_downsample = mint.tile(mask_downsample, (batch_size, 1, 1))
 
         mask_downsample = mask_downsample.view(mask_downsample.shape[0], -1)
 
@@ -764,14 +766,16 @@ class IPAdapterMaskProcessor(VaeImageProcessor):
         # If the output image and the mask do not have the same aspect ratio, tensor shapes will not match
         # Pad tensor if downsampled_mask.shape[1] is smaller than num_queries
         if downsampled_area < num_queries:
-            mask_downsample = ops.Pad(paddings=((0, 0), (0, num_queries - mask_downsample.shape[1])))(mask_downsample)
+            mask_downsample = mint.nn.functional.pad(
+                mask_downsample, (0, num_queries - mask_downsample.shape[1]), value=0.0
+            )
         # Discard last embeddings if downsampled_mask.shape[1] is bigger than num_queries
         if downsampled_area > num_queries:
             mask_downsample = mask_downsample[:, :num_queries]
 
         # Repeat last dimension to match SDPA output shape
-        mask_downsample = mask_downsample.view(mask_downsample.shape[0], mask_downsample.shape[1], 1).tile(
-            (1, 1, value_embed_dim)
+        mask_downsample = mint.tile(
+            mask_downsample.view(mask_downsample.shape[0], mask_downsample.shape[1], 1), (1, 1, value_embed_dim)
         )
 
         return mask_downsample
@@ -837,7 +841,7 @@ class PixArtImageProcessor(VaeImageProcessor):
             resized_height = int(orig_height * ratio)
 
             # Resize
-            samples = ops.interpolate(
+            samples = mint.nn.functional.interpolate(
                 samples, size=(resized_height, resized_width), mode="bilinear", align_corners=False
             )
 

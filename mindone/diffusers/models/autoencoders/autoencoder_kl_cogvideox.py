@@ -18,7 +18,7 @@ from typing import Optional, Tuple, Union
 import numpy as np
 
 import mindspore as ms
-from mindspore import nn, ops
+from mindspore import mint, nn
 
 from ...configuration_utils import ConfigMixin, register_to_config
 from ...loaders.single_file_model import FromOriginalModelMixin
@@ -35,30 +35,30 @@ from .vae import DecoderOutput, DiagonalGaussianDistribution
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
-class CogVideoXSafeConv3d(nn.Conv3d):
+class CogVideoXSafeConv3d(mint.nn.Conv3d):
     r"""
     A 3D convolution layer that splits the input tensor into smaller parts to avoid OOM in CogVideoX Model.
     """
 
     def construct(self, input: ms.Tensor) -> ms.Tensor:
-        memory_count = ops.prod(ms.Tensor(input.shape)).item() * 2 / 1024**3
+        memory_count = mint.prod(ms.Tensor(input.shape)).item() * 2 / 1024**3
 
         # Set to 2GB, suitable for CuDNN
         if memory_count > 2:
             kernel_size = self.kernel_size[0]
             part_num = int(memory_count / 2) + 1
-            input_chunks = ops.chunk(input, part_num, axis=2)
+            input_chunks = mint.chunk(input, part_num, dim=2)
 
             if kernel_size > 1:
                 input_chunks = [input_chunks[0]] + [
-                    ops.cat((input_chunks[i - 1][:, :, -kernel_size + 1 :], input_chunks[i]), axis=2)
+                    mint.cat((input_chunks[i - 1][:, :, -kernel_size + 1 :], input_chunks[i]), dim=2)
                     for i in range(1, len(input_chunks))
                 ]
 
             output_chunks = []
             for input_chunk in input_chunks:
                 output_chunks.append(super().construct(input_chunk))
-            output = ops.cat(output_chunks, axis=2)
+            output = mint.cat(output_chunks, dim=2)
             return output
         else:
             return super().construct(input)
@@ -113,8 +113,6 @@ class CogVideoXCausalConv3d(nn.Cell):
             kernel_size=kernel_size,
             stride=stride,
             dilation=dilation,
-            pad_mode="pad",
-            has_bias=True,
         )
 
         self.conv_cache = None
@@ -123,7 +121,7 @@ class CogVideoXCausalConv3d(nn.Cell):
         kernel_size = self.time_kernel_size
         if kernel_size > 1:
             cached_inputs = [self.conv_cache] if self.conv_cache is not None else [inputs[:, :, :1]] * (kernel_size - 1)
-            inputs = ops.cat(cached_inputs + [inputs], axis=2)
+            inputs = mint.cat(cached_inputs + [inputs], dim=2)
         return inputs
 
     def _clear_fake_context_parallel_cache(self):
@@ -180,7 +178,7 @@ class CogVideoXSpatialNorm3D(nn.Cell):
             # using fp32_interpolate as bfloat16 is not supported by original interpolate
             z_first = fp32_interpolate(z_first, size=f_first_size)
             z_rest = fp32_interpolate(z_rest, size=f_rest_size)
-            zq = ops.cat([z_first, z_rest], axis=2)
+            zq = mint.cat([z_first, z_rest], dim=2)
         else:
             zq = fp32_interpolate(zq, size=f.shape[-3:])
 
@@ -258,9 +256,9 @@ class CogVideoXResnetBlock3D(nn.Cell):
         )
 
         if temb_channels > 0:
-            self.temb_proj = nn.Dense(in_channels=temb_channels, out_channels=out_channels)
+            self.temb_proj = mint.nn.Linear(temb_channels, out_channels)
 
-        self.dropout = nn.Dropout(p=dropout)
+        self.dropout = mint.nn.Dropout(p=dropout)
         self.conv2 = CogVideoXCausalConv3d(
             in_channels=out_channels, out_channels=out_channels, kernel_size=3, pad_mode=pad_mode
         )
@@ -277,8 +275,6 @@ class CogVideoXResnetBlock3D(nn.Cell):
                     kernel_size=1,
                     stride=1,
                     padding=0,
-                    pad_mode="pad",
-                    has_bias=True,
                 )
 
     def construct(
@@ -696,7 +692,7 @@ class CogVideoXEncoder3D(nn.Cell):
         )
 
         self.norm_out = GroupNorm(norm_num_groups, block_out_channels[-1], eps=1e-6)
-        self.conv_act = nn.SiLU()
+        self.conv_act = mint.nn.SiLU()
         self.conv_out = CogVideoXCausalConv3d(
             block_out_channels[-1], 2 * out_channels, kernel_size=3, pad_mode=pad_mode
         )
@@ -830,7 +826,7 @@ class CogVideoXDecoder3D(nn.Cell):
         self.up_blocks = nn.CellList(self.up_blocks)
 
         self.norm_out = CogVideoXSpatialNorm3D(reversed_block_out_channels[-1], in_channels, groups=norm_num_groups)
-        self.conv_act = nn.SiLU()
+        self.conv_act = mint.nn.SiLU()
         self.conv_out = CogVideoXCausalConv3d(
             reversed_block_out_channels[-1], out_channels, kernel_size=3, pad_mode=pad_mode
         )
@@ -959,12 +955,8 @@ class AutoencoderKLCogVideoX(ModelMixin, ConfigMixin, FromOriginalModelMixin):
             norm_num_groups=norm_num_groups,
             temporal_compression_ratio=temporal_compression_ratio,
         )
-        self.quant_conv = (
-            CogVideoXSafeConv3d(2 * out_channels, 2 * out_channels, 1, has_bias=True) if use_quant_conv else None
-        )
-        self.post_quant_conv = (
-            CogVideoXSafeConv3d(out_channels, out_channels, 1, has_bias=True) if use_post_quant_conv else None
-        )
+        self.quant_conv = CogVideoXSafeConv3d(2 * out_channels, 2 * out_channels, 1) if use_quant_conv else None
+        self.post_quant_conv = CogVideoXSafeConv3d(out_channels, out_channels, 1) if use_post_quant_conv else None
         self.diag_gauss_dist = DiagonalGaussianDistribution()
 
         self.use_slicing = False
@@ -1091,7 +1083,7 @@ class AutoencoderKLCogVideoX(ModelMixin, ConfigMixin, FromOriginalModelMixin):
             enc.append(x_intermediate)
 
         self._clear_fake_context_parallel_cache()
-        enc = ops.cat(enc, axis=2)
+        enc = mint.cat(enc, dim=2)
 
         return enc
 
@@ -1112,7 +1104,7 @@ class AutoencoderKLCogVideoX(ModelMixin, ConfigMixin, FromOriginalModelMixin):
         """
         if self.use_slicing and x.shape[0] > 1:
             encoded_slices = [self._encode(x_slice) for x_slice in x.split(1)]
-            h = ops.cat(encoded_slices)
+            h = mint.cat(encoded_slices)
         else:
             h = self._encode(x)
 
@@ -1142,7 +1134,7 @@ class AutoencoderKLCogVideoX(ModelMixin, ConfigMixin, FromOriginalModelMixin):
             dec.append(z_intermediate)
 
         self._clear_fake_context_parallel_cache()
-        dec = ops.cat(dec, axis=2)
+        dec = mint.cat(dec, dim=2)
 
         if not return_dict:
             return (dec,)
@@ -1165,7 +1157,7 @@ class AutoencoderKLCogVideoX(ModelMixin, ConfigMixin, FromOriginalModelMixin):
         """
         if self.use_slicing and z.shape[0] > 1:
             decoded_slices = [self._decode(z_slice).sample for z_slice in z.split(1)]
-            decoded = ops.cat(decoded_slices)
+            decoded = mint.cat(decoded_slices)
         else:
             decoded = self._decode(z)[0]
 
@@ -1241,7 +1233,7 @@ class AutoencoderKLCogVideoX(ModelMixin, ConfigMixin, FromOriginalModelMixin):
                         tile = self.quant_conv(tile)
                     time.append(tile)
                 self._clear_fake_context_parallel_cache()
-                row.append(ops.cat(time, axis=2))
+                row.append(mint.cat(time, dim=2))
             rows.append(row)
 
         result_rows = []
@@ -1255,9 +1247,9 @@ class AutoencoderKLCogVideoX(ModelMixin, ConfigMixin, FromOriginalModelMixin):
                 if j > 0:
                     tile = self.blend_h(row[j - 1], tile, blend_extent_width)
                 result_row.append(tile[:, :, :, :row_limit_height, :row_limit_width])
-            result_rows.append(ops.cat(result_row, axis=4))
+            result_rows.append(mint.cat(result_row, dim=4))
 
-        enc = ops.cat(result_rows, axis=3)
+        enc = mint.cat(result_rows, dim=3)
         return enc
 
     def tiled_decode(self, z: ms.Tensor, return_dict: bool = False) -> Union[DecoderOutput, ms.Tensor]:
@@ -1318,7 +1310,7 @@ class AutoencoderKLCogVideoX(ModelMixin, ConfigMixin, FromOriginalModelMixin):
                     tile = self.decoder(tile)
                     time.append(tile)
                 self._clear_fake_context_parallel_cache()
-                row.append(ops.cat(time, axis=2))
+                row.append(mint.cat(time, dim=2))
             rows.append(row)
 
         result_rows = []
@@ -1332,9 +1324,9 @@ class AutoencoderKLCogVideoX(ModelMixin, ConfigMixin, FromOriginalModelMixin):
                 if j > 0:
                     tile = self.blend_h(row[j - 1], tile, blend_extent_width)
                 result_row.append(tile[:, :, :, :row_limit_height, :row_limit_width])
-            result_rows.append(ops.cat(result_row, axis=4))
+            result_rows.append(mint.cat(result_row, dim=4))
 
-        dec = ops.cat(result_rows, axis=3)
+        dec = mint.cat(result_rows, dim=3)
 
         if not return_dict:
             return (dec,)

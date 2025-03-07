@@ -7,7 +7,7 @@ from ddt import data, ddt, unpack
 import mindspore as ms
 
 import mindone.transformers.models.speecht5.modeling_speecht5
-from mindone.diffusers.utils.testing_utils import load_downloaded_numpy_from_hf_hub, slow
+from mindone.diffusers.utils.testing_utils import load_numpy, slow
 
 from ..pipeline_test_utils import (
     THRESHOLD_FP16,
@@ -232,9 +232,7 @@ class MusicLDMPipelineNightlyTests(PipelineTesterMixin, unittest.TestCase):
         )[0]
         audio = audios[0]
 
-        expected_audio = load_downloaded_numpy_from_hf_hub(
-            "The-truth/mindone-testing-arrays",
+        expected_audio = load_numpy(
             f"musicldm_{dtype}.npy",
-            subfolder="mochi",
         )
         assert np.mean(np.abs(np.array(audio, dtype=np.float32) - expected_audio)) < THRESHOLD_PIXEL

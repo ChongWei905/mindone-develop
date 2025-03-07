@@ -221,10 +221,9 @@ class StableDiffusionPAGPipelineIntegrationTests(PipelineTesterMixin, unittest.T
             guidance_scale=7.0,
             pag_scale=3.0,
         )[0][0]
+        image.save(f"pag_sd_inpaint_{dtype}_{mode}_generate.png")
 
         expected_image = load_downloaded_numpy_from_hf_hub(
-            "The-truth/mindone-testing-arrays",
             f"pag_sd_inpaint_{dtype}.npy",
-            subfolder="pag",
         )
         assert np.mean(np.abs(np.array(image, dtype=np.float32) - expected_image)) < THRESHOLD_PIXEL

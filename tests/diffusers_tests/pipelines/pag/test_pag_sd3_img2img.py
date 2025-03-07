@@ -8,11 +8,7 @@ from transformers import CLIPTextConfig
 
 import mindspore as ms
 
-from mindone.diffusers.utils.testing_utils import (
-    load_downloaded_image_from_hf_hub,
-    load_downloaded_numpy_from_hf_hub,
-    slow,
-)
+from mindone.diffusers.utils.testing_utils import load_downloaded_image_from_hf_hub, load_numpy, slow
 
 from ..pipeline_test_utils import (
     THRESHOLD_FP16,
@@ -254,10 +250,9 @@ class StableDiffusion3PAGImg2ImgPipelineIntegrationTests(PipelineTesterMixin, un
             guidance_scale=7.0,
             pag_scale=0.7,
         )[0][0]
+        image.save(f"pag_sd3_img2img_{dtype}_{mode}_generate.png")
 
-        expected_image = load_downloaded_numpy_from_hf_hub(
-            "The-truth/mindone-testing-arrays",
+        expected_image = load_numpy(
             f"pag_sd3_img2img_{dtype}.npy",
-            subfolder="pag",
         )
         assert np.mean(np.abs(np.array(image, dtype=np.float32) - expected_image)) < THRESHOLD_PIXEL

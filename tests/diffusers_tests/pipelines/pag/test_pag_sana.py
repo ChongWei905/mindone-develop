@@ -7,7 +7,7 @@ from transformers.models.gemma2 import Gemma2Config
 
 import mindspore as ms
 
-from mindone.diffusers.utils.testing_utils import load_downloaded_numpy_from_hf_hub, slow
+from mindone.diffusers.utils.testing_utils import load_numpy, slow
 
 from ..pipeline_test_utils import (
     THRESHOLD_FP16,
@@ -196,10 +196,9 @@ class SanaPAGPipelineIntegrationTests(PipelineTesterMixin, unittest.TestCase):
         pipe.transformer = pipe.transformer.to(ms.bfloat16)
         prompt = 'a cyberpunk cat with a neon sign that says "Sana"'
         image = pipe(prompt=prompt)[0][0]
+        image.save(f"pag_sana_{dtype}_{mode}_generate.png")
 
-        expected_image = load_downloaded_numpy_from_hf_hub(
-            "The-truth/mindone-testing-arrays",
+        expected_image = load_numpy(
             f"pag_sana_{dtype}.npy",
-            subfolder="pag",
         )
         assert np.mean(np.abs(np.array(image, dtype=np.float32) - expected_image)) < THRESHOLD_PIXEL

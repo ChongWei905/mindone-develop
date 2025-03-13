@@ -24,11 +24,7 @@ from transformers import CLIPTextConfig
 
 import mindspore as ms
 
-from mindone.diffusers.utils.testing_utils import (
-    load_downloaded_image_from_hf_hub,
-    load_downloaded_numpy_from_hf_hub,
-    slow,
-)
+from mindone.diffusers.utils.testing_utils import load_image, load_numpy, slow
 
 from ..pipeline_test_utils import (
     THRESHOLD_FP16,
@@ -202,15 +198,11 @@ class StableDiffusionPAGPipelineIntegrationTests(PipelineTesterMixin, unittest.T
 
         torch.manual_seed(0)
         prompt = "A majestic tiger sitting on a bench"
-        init_image = load_downloaded_image_from_hf_hub(
-            "The-truth/mindone-testing-arrays",
-            "inpaint_input.png",
-            subfolder="stable_diffusion_xl",
+        init_image = load_image(
+            "overture-creations-5sI6fQgYIuo.png",
         ).convert("RGB")
-        mask_image = load_downloaded_image_from_hf_hub(
-            "The-truth/mindone-testing-arrays",
-            "inpaint_mask.png",
-            subfolder="stable_diffusion_xl",
+        mask_image = load_image(
+            "overture-creations-5sI6fQgYIuo_mask.png",
         ).convert("RGB")
         image = pipe(
             prompt=prompt,
@@ -221,10 +213,9 @@ class StableDiffusionPAGPipelineIntegrationTests(PipelineTesterMixin, unittest.T
             guidance_scale=7.0,
             pag_scale=3.0,
         )[0][0]
+        image.save(f"pag_sd_inpaint_{dtype}_{mode}_generate.png")
 
-        expected_image = load_downloaded_numpy_from_hf_hub(
-            "The-truth/mindone-testing-arrays",
+        expected_image = load_numpy(
             f"pag_sd_inpaint_{dtype}.npy",
-            subfolder="pag",
         )
         assert np.mean(np.abs(np.array(image, dtype=np.float32) - expected_image)) < THRESHOLD_PIXEL

@@ -8,7 +8,7 @@ from transformers.models.speecht5.configuration_speecht5 import SpeechT5HifiGanC
 
 import mindspore as ms
 
-from mindone.diffusers.utils.testing_utils import load_downloaded_numpy_from_hf_hub, slow
+from mindone.diffusers.utils.testing_utils import load_numpy, slow
 
 from ..pipeline_test_utils import (
     THRESHOLD_FP16,
@@ -227,10 +227,11 @@ class MusicLDMPipelineNightlyTests(PipelineTesterMixin, unittest.TestCase):
         ).audios
         audio = audios[0]
 
-        expected_audio = load_downloaded_numpy_from_hf_hub(
-            "The-truth/mindone-testing-arrays",
+        import scipy
+        scipy.io.wavfile.write(f"musicldm_{dtype}_{mode}_generate.wav", 16000, audio)
+
+        expected_audio = load_numpy(
             f"musicldm_{dtype}.npy",
-            subfolder="musicldm",
         )
 
         threshold = 5e-2 if dtype == "float32" else 3e-1

@@ -6,7 +6,7 @@ from ddt import data, ddt, unpack
 
 import mindspore as ms
 
-from mindone.diffusers.utils.testing_utils import load_downloaded_numpy_from_hf_hub, slow
+from mindone.diffusers.utils.testing_utils import export_to_gif, load_numpy, slow
 
 from ..pipeline_test_utils import (
     THRESHOLD_FP16,
@@ -135,10 +135,8 @@ class MochiPipelineFastTests(PipelineTesterMixin, unittest.TestCase):
         torch.manual_seed(0)
         ms_video = ms_pipe(**inputs)[0]
 
-        pt_generated_video = load_downloaded_numpy_from_hf_hub(
-            "The-truth/mindone-testing-arrays",
+        pt_generated_video = load_numpy(
             f"mochi_{dtype}_fasttest.npy",
-            subfolder="mochi",
         )
         ms_generated_video = ms_video[0]
 
@@ -168,10 +166,9 @@ class MochiPipelineIntegrationTests(PipelineTesterMixin, unittest.TestCase):
             num_inference_steps=2,
         )[0]
         video = videos[0]
+        export_to_gif(video, f"mochi_{dtype}_{mode}_generate.gif")
 
-        expected_video = load_downloaded_numpy_from_hf_hub(
-            "The-truth/mindone-testing-arrays",
+        expected_video = load_numpy(
             f"mochi_{dtype}.npy",
-            subfolder="mochi",
         )
         assert np.mean(np.abs(np.array(video, dtype=np.float32) - expected_video)) < THRESHOLD_PIXEL

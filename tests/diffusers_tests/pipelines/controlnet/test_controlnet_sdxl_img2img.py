@@ -235,7 +235,6 @@ class ControlNetPipelineSDXLImg2ImgFastTests(PipelineTesterMixin, unittest.TestC
             "image": ms_image,
             "control_image": ms_image,
         }
-
         return pt_inputs, ms_inputs
 
     @data(*test_cases)

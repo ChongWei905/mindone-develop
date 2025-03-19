@@ -184,7 +184,6 @@ class ControlNetInpaintPipelineFastTests(PipelineTesterMixin, unittest.TestCase)
             "mask_image": mask_image,
             "control_image": ms_control_image,
         }
-
         return pt_inputs, ms_inputs
 
     @data(*test_cases)
